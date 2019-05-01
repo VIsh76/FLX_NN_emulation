@@ -5,4 +5,6 @@
 *.nc4
 # Python folder and files
 __pycache__
+venv
+.idea
 .ipynb_checkpoints
