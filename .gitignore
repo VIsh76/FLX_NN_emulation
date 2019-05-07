@@ -1,6 +1,7 @@
 
 # Weights
-*h5
+*.h5
+*.hdf5
 # nc4 files
 *.nc4
 # Python folder and files
