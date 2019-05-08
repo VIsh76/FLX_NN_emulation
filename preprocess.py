@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 
 class Preprocess(object):
     """
@@ -6,9 +7,12 @@ class Preprocess(object):
     """
     def __init__(self):
         self.fitted=False
-        pass
 
-    def apply(self,x):
+    @property
+    def new_vars(self):
+        return []
+
+    def __call__(self,x):
         return x
 
     def fit(self,x):
@@ -27,7 +31,7 @@ class Normalizer(Preprocess):
         self.m = 0
         self.std = 1
 
-    def apply(self,x):
+    def __call__(self,x):
         x-=self.m
         x/=self.std
         return x
@@ -36,6 +40,15 @@ class Normalizer(Preprocess):
         self.fitted=True
         self.m = np.mean(x)
         self.std = np.std(x)
+
+    @property
+    def params(self):
+        return self.m, self.std
+
+    def set_params(self, x,y):
+        self.fitted=True
+        self.m = x
+        self.std = y
 
     def __str__(self):
         return super().__str__().format("Normalizer", self.fitted, (self.m, self.std))
@@ -49,7 +62,7 @@ class Zero_One(Preprocess):
         self.max=1
         self.min=1
 
-    def apply(self,x):
+    def __call__(self,x):
         x-=self.min
         x/=(self.max-self.min)
         return x
@@ -59,9 +72,17 @@ class Zero_One(Preprocess):
         self.min = np.min(x)
         self.max = np.max(x)
 
+    def set_params(self, x,y):
+        self.fitted=True
+        self.min = x
+        self.max = y
+
+    @property
+    def params(self):
+        return self.min, self.max
+
     def __str__(self):
         return super().__str__().format("Zero_One", self.fitted, (self.max, self.min))
-
 
 ###################################### Dict preprocess class
 
@@ -74,66 +95,104 @@ class DictPrepross(object):
         for i,h in enumerate(header):
             self.dict[h]=functions[i]
 
-    def fitonNetCDF(self, data_in):
-        for k in self.dict.keys():
-            self[k].fit(data_in[k][:])
+    def load_from_pd(self, pd_file):
+        self.dict=dict()
+        for i,k in enumerate(pd_file['Name']):
+            self.dict[k] = eval(pd_file['Type'][i].split('.')[-1])()
+            self.dict[k].set_params( pd_file['P1'][i], pd_file['P2'][i] )
 
-    def apply(self,x,h):
-        if h in self.dict.keys():
-            return self[h].apply(x)
-        else:
-            return x
+    def fitonGen(self, B):
+        """ Generator must generate entire file """
+        for k in self.dict.keys():
+            print(k)
+            x0 = np.array([0,1])
+            for _,_ in B:
+                x = np.array(B.X.copy()[k])
+                x = x.flatten()
+                x0 = np.hstack((x0,x))
+                self[k].fit(x[1:])
+
+    def add(self, F, v , params=[0,1]):
+       self[v] = F
+       self[v].set_params(params)
+
+
+    def __call__(self,data_f):
+        for h in self.dict.keys():
+            data_f[h] = self[h](data_f[h])
+        return(data_f)
 
     def __getitem__(self,k):
         return self.dict[k]
 
+    def __len__(self):
+        print(len(self.dict))
+
     def __str__(self):
         out =''
-        for h in self.dict.keys():
+        l = list(self.dict.keys())
+        l.sort()
+        for h in l:
             out = out + '{} : {}'.format(h, str(self[h]))+'\n'
         return out
 
+    def to_array_save(self):
+        Type = []
+        Name = []
+        P1 = []
+        P2 = []
+        for k in self.dict:
+            Name.append(k)
+            Type.append(str(type(self[k]))[1:-2])
+            P1.append(self[k].params[0])
+            P2.append(self[k].params[1])
+        data = {'Name':Name, 'P1':P1, 'P2': P2, 'Type':Type}
+        return pd.DataFrame(data)
+
+
 ################################### KERNEL class
 
-class Kernel(object):
-    def __init__(self, ids):
-        self.ids = ids
+class Kernel(Preprocess):
+    def __init__(self, var):
+        super(Kernel, self).__init__()
+        self.vars = var
 
-    def apply(self, x, header):
-        return x
+    @property
+    def new_vars(self):
+        return([])
 
+    def __call__(self, dataf):
+        return dataf
 
 class ProdKernel(Kernel):
-    def __init__(self, ids=[]):
-        Kernel.__init__(self, ids)
-        self.ids = ids
-        self.header = []
+    def __init__(self, var=[]):
+        Kernel.__init__(self, var)
 
-    def apply(self, x, header):
-        for ids in self.ids:
-            id1 = np.where(ids[0] == header)[0]
-            id2 = np.where(ids[1] == header)[0]
-            k = x[:, :, id1]*x[:, :, id2]
-            header.append(ids[0]+'*'+ids[1])
-            x = np.concatenate((k, x), axis=-1)
-        return x
+    def __call__(self, dataf):
+        for v1,v2 in self.vars:
+            Mu=dataf[v1].mul(dataf[v2])
+            Mu.columns = pd.MultiIndex.from_product([[str(v1)+'*'+str(v2)], Mu.columns])
+            dataf = dataf.join(Mu)
+        return dataf
 
+    @property
+    def new_vars(self):
+        return( [str(v1)+'*'+str(v2) for v1,v2 in self.vars])
 
 class FKernel(Kernel):
-    def __init__(self, func, gamma=1, ids=[]):
-        Kernel.__init__(self, ids)
+    def __init__(self, func, gamma=1, var=[]):
+        Kernel.__init__(self, var)
         self.func = func
         self.gamma = gamma
         self.fname = str(func).split(' ')[1]
-        self.ids = ids
 
-    def apply(self, x, xheader):
-        xheader0 = xheader.copy()
-        self.header = []
-        for ids in self.ids:
-            id1 = np.where(ids[0] == xheader)[0]
-            k = self.func(x[:, :, id1])
-            xheader0.append(fname+ids[0])
-            x = np.concatenate((k, x), axis=-1)
-        self.xheader = xheader
-        return x
+    def __call__(self, dataf):
+        for var in self.vars:
+            Mu=self.func(self.gamma*dataf[var])
+            Mu.columns = pd.MultiIndex.from_product( [[self.fname+str(var)], Mu.columns])
+            dataf = dataf.join(Mu)
+        return dataf
+
+    @property
+    def new_vars(self):
+        return( [self.fname+str(var) for var in self.vars] )
