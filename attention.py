@@ -25,8 +25,10 @@ def Plot_Batch(x0, y0, header):
     for b in range(y0.shape[0]):
         ax.plot(np.flip(y0[b]), np.arange(len(y0[b])))
 
-########## GET DICTIONNARY :
 
+
+
+########## GET DICTIONNARY :
 fct = []
 for i in range(5):
     fct.append(Zero_One())

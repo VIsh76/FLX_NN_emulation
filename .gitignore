@@ -4,6 +4,10 @@
 *.hdf5
 # nc4 files
 *.nc4
+# Images
+*.png
+*.jpg
+
 # Python folder and files
 __pycache__
 venv

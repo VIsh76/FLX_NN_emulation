@@ -11,6 +11,7 @@ class Basic_Generator(keras.utils.Sequence):
     """
     def __init__(self, folder=data_folder, train=True, batch_size=64, shuffle=True, custom_b_p_e = 0):
         # global parameters
+        self._set_init_true()
         self.train = train
         self.batch_size = batch_size
         self.shuffle = shuffle
@@ -23,18 +24,18 @@ class Basic_Generator(keras.utils.Sequence):
         self.idx_file = np.arange(self._div)
         self.idx_el = np.arange(self.Xdim*self.Ydim)
         self.current_b = 0
-
         self.current_folder = 0
         self.current_file = 0
         # randomize
         self.on_epoch_end()
+        self._set_init_false()
 
     def _set_dirs(self, datafolder):
         self.List_of_dir = []
         folders = os.listdir(datafolder)
         folders.sort()
         for i in folders:
-            if os.path.isdir(os.path.join(datafolder,i)):
+            if os.path.isdir(os.path.join(datafolder,i)) and i != '.ipynb_checkpoints':
                 self.List_of_dir.append(os.path.join(datafolder,i))
         if(self.train):  # last folder is used as test
             self.List_of_dir = self.List_of_dir[:-1]
@@ -44,26 +45,33 @@ class Basic_Generator(keras.utils.Sequence):
 
     def _initialise_parameters(self):
         """ load one file to compute variables such as the dimensions, the name of var etc """
-        x, y = self.load_a_couple(self.load_a_path(0,0))
+        x, y = self._load_a_couple0(self.load_a_path(0,0))
         self._div = int(len(os.listdir(self.List_of_dir[0]))/2)
         self.variables = list(x.columns.levels[0])
-        self.variables_pred = y.columns.levels[0]
+        self.variables_pred = list(y.columns.levels[0])
         self.Xdim = len(x.index.levels[0])
         self.Ydim = len(x.index.levels[1])
         self.lev = len(x.columns.levels[1])
 
     def load_a_path(self, id_fold, id_file):
         for f in os.listdir(self.List_of_dir[id_fold]):
-            if '_in' in f and '_'+str(id_file)+'.' in f:
-                input_path = os.path.join(self.List_of_dir[id_fold], f)
-            if '_out' in f and '_'+str(id_file)+'.' in f:
-                output_path = os.path.join(self.List_of_dir[id_fold], f)
+            if f.split('.')[-1] == 'hdf5':
+                if '_in' in f and '_'+str(id_file)+'.' in f:
+                    input_path = os.path.join(self.List_of_dir[id_fold], f)
+                if '_out' in f and '_'+str(id_file)+'.' in f:
+                    output_path = os.path.join(self.List_of_dir[id_fold], f)
         return (input_path, output_path)
+
+    def _load_a_couple0(self, path):
+        """Load x and y only call once for initialisation"""
+        assert(self._initialisation)
+        X = pd.read_hdf(path[0], key='s')
+        Y = pd.read_hdf(path[1], key='s')
+        return X , Y
 
     def load_a_couple(self, path):
         """Load x and y files given by the two values of path"""
         return  pd.read_hdf(path[0], key='s'), pd.read_hdf(path[1], key='s')
-
     @property
     def dimensions(self):
         d=dict()
@@ -82,7 +90,12 @@ class Basic_Generator(keras.utils.Sequence):
             return(min(self.max_b, l))
         return(l)
 
-    def on_epoch_end(self):
+    def _set_init_false(self):
+        self._initialisation=False
+    def _set_init_true(self):
+        self._initialisation=True
+
+    def on_epoch_end(self, _initialisation=False):
         'Updates indexes after each epoch'
         self.current_b = 0
         if self.shuffle:
@@ -91,7 +104,10 @@ class Basic_Generator(keras.utils.Sequence):
             np.random.shuffle(self.idx_el)
         self.current_folder = self.idx_folder[0]
         self.current_file = self.idx_file[0]
-        self.X, self.Y = self.load_a_couple(self.load_a_path(self.current_folder, self.current_file))
+        if(self._initialisation):
+            self.X, self.Y = self._load_a_couple0(self.load_a_path(self.current_folder, self.current_file))
+        else:
+            self.X, self.Y = self.load_a_couple(self.load_a_path(self.current_folder, self.current_file))
 
     def __getitem__(self, index):
         'Generate one batch of data'
@@ -126,7 +142,6 @@ class Basic_Generator(keras.utils.Sequence):
         Y = np.array(self.Y.iloc[el_ids]).reshape(self.batch_size, len(self.variables_pred), self.lev+1)
         return X,Y
 
-
 ######## Children Class, with preprocessing :
 
 class Preprocessed_Generator(Basic_Generator):
@@ -137,26 +152,36 @@ class Preprocessed_Generator(Basic_Generator):
         self.preprocess_y = preprocess_y
         self.reconfigured = False
         self._reconfigure_outputs()
+        self.on_epoch_end()
 
     def _reconfigure_outputs(self):
         # preprocessing can generate new variables that have to be takken into account
+        self._new_variables = []
         if not self.reconfigured:
             for p in self.preprocess_x:
                 for var in p.new_vars:
                     self.variables.append(var)
+                    self._new_variables.append(var)
         self.reconfigured = True
 
     def apply_preprocess_x(self,X):
+        X = np.array(X).reshape(self.Xdim*self.Ydim , len(self.variables)-len(self._new_variables), self.lev)
         for p in self.preprocess_x:
-            X = p(X)
-        X = np.array(X).reshape(self.batch_size, len(self.variables), self.lev)
-        return(X)
+            X = p(X, self.variables)
+        return X
 
     def apply_preprocess_y(self,Y):
+        Y = np.array(Y).reshape(self.Xdim*self.Ydim, len(self.variables_pred), self.lev+1)
         for p in self.preprocess_y:
-            Y = p(Y)
-        Y = np.array(Y).reshape(self.batch_size, len(self.variables_pred), self.lev+1)
-        return(Y)
+            Y = p(Y, self.variables_pred)
+        return Y
+
+    def load_a_couple(self, path):
+        """Load x and y files given by the two values of path"""
+        X,Y = pd.read_hdf(path[0], key='s'), pd.read_hdf(path[1], key='s')
+        X = self.apply_preprocess_x(X)
+        Y = self.apply_preprocess_y(Y)
+        return X,Y
 
     def __getitem__(self, index):
         'Generate one batch of data'
@@ -171,36 +196,40 @@ class Preprocessed_Generator(Basic_Generator):
     def __data_generation(self, folder_id, file_id, el_ids):
         'Generates data containing batch_size samples'
         self.reload(folder_id, file_id)
-        X = self.apply_preprocess_x(self.X.iloc[el_ids].copy())
-        Y = self.apply_preprocess_y(self.Y.iloc[el_ids].copy())
+        X = self.X[el_ids]
+        Y = self.Y[el_ids]
+        X=X.swapaxes(1,2)
         return X,Y
 
 ######## Differenciate Y and take only differences in flx as the output
 
-class Diff_Generator(Preprocessed_Generator):
+class Full_Diff_Generator(Preprocessed_Generator):
     def __init__(self, folder=data_folder, train=True, batch_size=64, shuffle=True, \
-                 custom_b_p_e = 0, preprocess_x=[]):
-        super(Preprocessed_Generator, self).__init__(folder, train, batch_size, shuffle, custom_b_p_e, \
+                 custom_b_p_e = 0, preprocess_x=[],  chosen_var = ['flxd','flxu','dfdts']):
+        self.new_variables_pred = chosen_var.copy()
+        super(Full_Diff_Generator, self).__init__(folder, train, batch_size, shuffle, custom_b_p_e, \
                                                     preprocess_x=preprocess_x, preprocess_y=[])
 
     def apply_preprocess_y(self,Y):
-        Y = (np.array(Y['flx'].iloc[:,1:]) - np.array(Y['flx'].iloc[:,:-1]))
-        Y = np.array(Y).reshape(self.batch_size, self.lev)
-        return(Y)
+        Y = np.array(Y).reshape(self.Xdim*self.Ydim, len(self.variables_pred), self.lev+1)
+        idflx = np.array( [self.variables_pred.index(name) for name in self.new_variables_pred])
+        Y = Y[:, idflx, 1:] - Y[:, idflx, :-1]
+        Y = Y.swapaxes(1,2)
+        return Y
 
-    def __getitem__(self, index):
-        'Generate one batch of data'
-        # Generate indexes of the batch
-        folder_id, file_id, el_id  = self.index_to_ids(index)
-        # use the shuffled indices
-        folder_id = self.idx_folder[folder_id]
-        file_id = self.idx_file[file_id]
-        el_ids = self.idx_el[el_id*self.batch_size + np.arange(self.batch_size)]
-        return( self.__data_generation(folder_id, file_id, el_ids))
+class Diff_Generator(Full_Diff_Generator):
+    def __init__(self, folder=data_folder, train=True, batch_size=64, shuffle=True, \
+                 custom_b_p_e = 0, preprocess_x=[]):
+        super(Diff_Generator, self).__init__(folder, train, batch_size, shuffle, custom_b_p_e, \
+                                                    preprocess_x=preprocess_x, chosen_var=['flx'])
 
-    def __data_generation(self, folder_id, file_id, el_ids):
-        'Generates data containing batch_size samples'
-        self.reload(folder_id, file_id)
-        X = self.apply_preprocess_x(self.X.iloc[el_ids].copy())
-        Y = self.apply_preprocess_y(self.Y.iloc[el_ids].copy())
-        return X,Y
+    def apply_preprocess_y(self,Y):
+        Y= super(Diff_Generator,self).apply_preprocess_y(Y)
+        Y = Y[:,:,0]
+        return Y
+    
+class Up_and_Down_Generator(Full_Diff_Generator):
+    def __init__(self, folder=data_folder, train=True, batch_size=64, shuffle=True, \
+                 custom_b_p_e = 0, preprocess_x=[]):
+        super(Up_and_Down_Generator, self).__init__(folder, train, batch_size, shuffle, custom_b_p_e, \
+                                                    preprocess_x=preprocess_x, chosen_var= ['flxd','flxu','dfdts'])

@@ -6,29 +6,29 @@ from netCDF4 import Dataset
 
 ### This file contains the function from_net_to_pd which convert a netcf4 file into a pd dataframe
 
-def Convert_all_from(folder='Data')
-	data_folder ='Data'
+def Convert_all_from(in_folder='Data', out_folder='Data'):
+	data_folder = in_folder
 	lst_files = os.listdir(data_folder)
 	lst_files.sort()
 	for f_name in lst_files:
 	    if os.path.isfile(os.path.join(data_folder , f_name)):
-		
-		f = Dataset(os.path.join(data_folder, f_name))
-		x = f.variables
-		header = list(x.keys())[6:]
 
-		folder_name = f_name.split('.')[-2]
-		out_folder = os.path.join( data_folder, folder_name)
-		
-		if not os.path.isdir(out_folder):
-		    print('Creating out_folder', out_folder)
-		    os.mkdir(out_folder)
-		
-		input_name  = os.path.join(data_folder,f_name)
-		output_name = os.path.join(out_folder, f_name)
+			f = Dataset(os.path.join(data_folder, f_name))
+			x = f.variables
+			header = list(x.keys())[6:] # 6 first var are dims, X,Y,lat, lon, time,
 
-		fully_convert_file(input_name, output_name, header = header, div=5)
-		print('---------')
+			folder_name = f_name.split('.')[-2]
+			out_folder = os.path.join( out_folder, folder_name)
+
+			if not os.path.isdir(out_folder):
+			    print('Creating out_folder', out_folder)
+			    os.mkdir(out_folder)
+
+			input_name  = os.path.join(data_folder,f_name)
+			output_name = os.path.join(out_folder, f_name)
+
+			fully_convert_file(input_name, output_name, header = header, div=5)
+			print('---------')
 
 def select(data, n0, p0, n1,p1, lev):
     """
@@ -75,7 +75,7 @@ def fully_convert_file(src, out, div, header, extension='.hdf5'):
 
     n0 = 0
     p0 = 0
-    n1 = n_step 
+    n1 = n_step
     p1 = p_step
 
     out_name = os.path.splitext(out)[0]
@@ -84,7 +84,7 @@ def fully_convert_file(src, out, div, header, extension='.hdf5'):
         print(i)
         dataf = from_net_to_pd(x, n0,p0,n1, p1,header, lev=lev)
         dataf.to_hdf(out_name+'_'+str(i)+extension, key='s')
-        n0 += n_step 
+        n0 += n_step
         p0 += p_step
-        n1 += n_step 
+        n1 += n_step
         p1 += p_step
