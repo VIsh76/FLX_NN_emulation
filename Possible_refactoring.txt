@@ -1,9 +1,4 @@
 
 Possible refactoring for more efficient code :
 
-- Generator : change __getitem__ and index_to_ids to give directly the corresponding element.
-(check possiblities online to only have to copy data_generation for the children classes)
-
-- Preprocessor and Generator : preprocess only np.array for more efficiency
-
 
