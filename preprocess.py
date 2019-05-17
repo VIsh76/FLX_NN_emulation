@@ -102,9 +102,10 @@ class Level_Normalizer(Preprocess):
         if self.fitted:
             x-= self.L/ self.norm
         else:
-            x-= np.mean(x, axis=0).reshape(1,-1)
+            x-= np.mean(x, axis=0)#.reshape(1,-1)
+            norm = np.std(x, axis=0)[-1]
             if self.renorm:
-                x/= np.std(x, axis=0)[-1]
+                x/= norm
         return x
 
     def fit(self, x):

@@ -1,6 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
+# Plot output of the FOrtran model
+
 def Plot(L):
     fig = plt.figure( figsize=(10, 8))
     alt = np.arange(73)

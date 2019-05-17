@@ -205,7 +205,7 @@ class Preprocessed_Generator(Basic_Generator):
 
 class Full_Diff_Generator(Preprocessed_Generator):
     def __init__(self, folder=data_folder, train=True, batch_size=64, shuffle=True, \
-                 custom_b_p_e = 0, preprocess_x=[],  chosen_var = ['flxd','flxu','dfdts']):
+                 custom_b_p_e = 0, preprocess_x=[],  chosen_var = ['flxd','flxu','dfdts','flx']):
         self.new_variables_pred = chosen_var.copy()
         super(Full_Diff_Generator, self).__init__(folder, train, batch_size, shuffle, custom_b_p_e, \
                                                     preprocess_x=preprocess_x, preprocess_y=[])
@@ -227,7 +227,7 @@ class Diff_Generator(Full_Diff_Generator):
         Y= super(Diff_Generator,self).apply_preprocess_y(Y)
         Y = Y[:,:,0]
         return Y
-    
+
 class Up_and_Down_Generator(Full_Diff_Generator):
     def __init__(self, folder=data_folder, train=True, batch_size=64, shuffle=True, \
                  custom_b_p_e = 0, preprocess_x=[]):
