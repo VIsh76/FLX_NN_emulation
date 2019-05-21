@@ -72,6 +72,7 @@ class Basic_Generator(keras.utils.Sequence):
     def load_a_couple(self, path):
         """Load x and y files given by the two values of path"""
         return  pd.read_hdf(path[0], key='s'), pd.read_hdf(path[1], key='s')
+
     @property
     def dimensions(self):
         d=dict()
@@ -92,6 +93,7 @@ class Basic_Generator(keras.utils.Sequence):
 
     def _set_init_false(self):
         self._initialisation=False
+
     def _set_init_true(self):
         self._initialisation=True
 
@@ -117,6 +119,7 @@ class Basic_Generator(keras.utils.Sequence):
         folder_id = self.idx_folder[folder_id]
         file_id = self.idx_file[file_id]
         el_ids = self.idx_el[el_id*self.batch_size + np.arange(self.batch_size)]
+        self.current_b = el_ids
         return( self.__data_generation(folder_id, file_id, el_ids))
 
     def index_to_ids(self,index):
@@ -217,6 +220,10 @@ class Full_Diff_Generator(Preprocessed_Generator):
         Y = Y.swapaxes(1,2)
         return Y
 
+#    def __data_generation(self, folder_id, file_id, el_ids):
+#        'Generates data containing batch_size samples'
+#        return super(Full_Diff_Generator, self).__data_generation(folder_id, file_id, el_ids)
+
 class Diff_Generator(Full_Diff_Generator):
     def __init__(self, folder=data_folder, train=True, batch_size=64, shuffle=True, \
                  custom_b_p_e = 0, preprocess_x=[]):
@@ -233,3 +240,31 @@ class Up_and_Down_Generator(Full_Diff_Generator):
                  custom_b_p_e = 0, preprocess_x=[]):
         super(Up_and_Down_Generator, self).__init__(folder, train, batch_size, shuffle, custom_b_p_e, \
                                                     preprocess_x=preprocess_x, chosen_var= ['flxd','flxu','dfdts'])
+
+class FC_Generator(Up_and_Down_Generator):
+    def __init__(self, folder=data_folder, train=True, batch_size=64, shuffle=True, \
+                 custom_b_p_e = 0, preprocess_x=[], unique_var=['pl', 'emis', 'ts']):
+        super(FC_Generator, self).__init__(folder, train, batch_size, shuffle, custom_b_p_e, preprocess_x=preprocess_x)
+        self.unique_var = unique_var
+        self._id_var_uni = [ self.variables.index(unique_var) for unique_var in self.unique_var ]
+        self._id_var_lev = [ self.variables.index(var) for var in self.variables if not var in self.unique_var ]
+
+    def __separate_uniques(self, X):
+        X_u = X[:, -1, self._id_var_uni]
+        X_l = X[:, :, self._id_var_lev]
+        return[X_l, X_u]
+
+    def apply_preprocess_y(self,Y):
+        Y= super(FC_Generator,self).apply_preprocess_y(Y)
+        Y = Y.swapaxes(1,2)
+        Y = Y.reshape(Y.shape[0], -1)
+        return Y
+
+    def __getitem__(self,index):
+        X,Y = super(FC_Generator, self).__getitem__(index)
+        return self.__separate_uniques(X), Y
+
+    def __data_generation(self, folder_id, file_id, el_ids):
+        'Generates data containing batch_size samples'
+        X,Y = super(FC_Generator, self).__data_generation(folder_id, file_id, el_ids)
+        return self.__separate_uniques(X), Y

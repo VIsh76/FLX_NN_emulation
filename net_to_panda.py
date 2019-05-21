@@ -10,15 +10,15 @@ def Convert_all_from(in_folder='Data', out_folder='Data'):
 	data_folder = in_folder
 	lst_files = os.listdir(data_folder)
 	lst_files.sort()
+	out_folder0 = out_folder
 	for f_name in lst_files:
-	    if os.path.isfile(os.path.join(data_folder , f_name)):
-
+		if os.path.isfile(os.path.join(data_folder , f_name)):
 			f = Dataset(os.path.join(data_folder, f_name))
 			x = f.variables
 			header = list(x.keys())[6:] # 6 first var are dims, X,Y,lat, lon, time,
 
 			folder_name = f_name.split('.')[-2]
-			out_folder = os.path.join( out_folder, folder_name)
+			out_folder = os.path.join( out_folder0, folder_name)
 
 			if not os.path.isdir(out_folder):
 			    print('Creating out_folder', out_folder)

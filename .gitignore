@@ -7,7 +7,8 @@
 # Images
 *.png
 *.jpg
-
+#
+*.json
 # Python folder and files
 __pycache__
 venv

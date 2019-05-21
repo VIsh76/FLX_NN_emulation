@@ -3,6 +3,7 @@ class CST(object):
     _data_folder='Data'
     _log_folder='Logs'
     _lev = 72
+    _output_y = 3
 
     @staticmethod
     def Model_folder(cls):
@@ -19,3 +20,7 @@ class CST(object):
     @staticmethod
     def lev(cls):
         return cls._lev
+
+    @staticmethod
+    def output_y(cls):
+        return cls._output_y
