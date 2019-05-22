@@ -8,6 +8,7 @@ class Basic_Generator(keras.utils.Sequence):
     """
     Use hdf5 datasets and simply return the desire variables
     To create a new Generator simply inherit this one and change '__init__' and __'data_generation
+    Shuffle : 0,1,2 : 0 no shuffle, 1 shuffle the data only, shuffle data and dataset order
     """
     def __init__(self, folder=data_folder, train=True, batch_size=64, shuffle=True, custom_b_p_e = 0):
         # global parameters
@@ -48,6 +49,7 @@ class Basic_Generator(keras.utils.Sequence):
         x, y = self._load_a_couple0(self.load_a_path(0,0))
         self._div = int(len(os.listdir(self.List_of_dir[0]))/2)
         self.variables = list(x.columns.levels[0])
+        self.used_variables = list(x.columns.levels[0])
         self.variables_pred = list(y.columns.levels[0])
         self.Xdim = len(x.index.levels[0])
         self.Ydim = len(x.index.levels[1])
@@ -77,7 +79,7 @@ class Basic_Generator(keras.utils.Sequence):
     def dimensions(self):
         d=dict()
         d['div'] = (self._div)
-        d['var'] = len(self.variables)
+        d['var'] = len(self.used_variables)
         d['x'] = self.Xdim
         d['y'] = self.Ydim
         d['lev'] = self.lev
@@ -100,10 +102,11 @@ class Basic_Generator(keras.utils.Sequence):
     def on_epoch_end(self, _initialisation=False):
         'Updates indexes after each epoch'
         self.current_b = 0
-        if self.shuffle:
+        if self.shuffle>0:
+            np.random.shuffle(self.idx_el)
+        if self.shuffle>1:
             np.random.shuffle(self.idx_folder)
             np.random.shuffle(self.idx_file)
-            np.random.shuffle(self.idx_el)
         self.current_folder = self.idx_folder[0]
         self.current_file = self.idx_file[0]
         if(self._initialisation):
@@ -122,14 +125,22 @@ class Basic_Generator(keras.utils.Sequence):
         self.current_b = el_ids
         return( self.__data_generation(folder_id, file_id, el_ids))
 
+    @property
+    def batch_per_file(self):
+        return( self.Xdim*self.Ydim // self.batch_size)
+
     def index_to_ids(self,index):
         index0 = index
-        batch_per_file = (self.Xdim*self.Ydim // self.batch_size)
+        batch_per_file = self.batch_per_file
         el_id = index0 % batch_per_file
         index0 = index0 // batch_per_file
         file_id = index0 % self._div
         folder_id   = index0 // self._div
         return folder_id, file_id, el_id
+
+    def ids_to_index(self, ids):
+        index = (ids[0]*self._div + ids[1])*self.batch_per_file +ids[2]
+        return(index)
 
     def reload(self,folder_id, file_id):
         """ Files are only loaded when the id of the file or folder is changed, this mutiply the speed by about 400"""
@@ -141,7 +152,7 @@ class Basic_Generator(keras.utils.Sequence):
     def __data_generation(self, folder_id, file_id, el_ids):
         'Generates data containing batch_size samples'
         self.reload(folder_id, file_id)
-        X = np.array(self.X.iloc[el_ids]).reshape(self.batch_size, len(self.variables), self.lev)
+        X = np.array(self.X.iloc[el_ids]).reshape(self.batch_size, len(self.used_variables), self.lev)
         Y = np.array(self.Y.iloc[el_ids]).reshape(self.batch_size, len(self.variables_pred), self.lev+1)
         return X,Y
 
@@ -160,11 +171,17 @@ class Preprocessed_Generator(Basic_Generator):
     def _reconfigure_outputs(self):
         # preprocessing can generate new variables that have to be takken into account
         self._new_variables = []
+        self.used_variables = []
         if not self.reconfigured:
             for p in self.preprocess_x:
                 for var in p.new_vars:
                     self.variables.append(var)
                     self._new_variables.append(var)
+            self.used_variables = self.variables.copy()
+            for p in self.preprocess_x:
+                for var in p.eliminated_vars:
+                    id = self.used_variables.index(var)
+                    del(self.used_variables[id])
         self.reconfigured = True
 
     def apply_preprocess_x(self,X):
@@ -246,8 +263,8 @@ class FC_Generator(Up_and_Down_Generator):
                  custom_b_p_e = 0, preprocess_x=[], unique_var=['pl', 'emis', 'ts']):
         super(FC_Generator, self).__init__(folder, train, batch_size, shuffle, custom_b_p_e, preprocess_x=preprocess_x)
         self.unique_var = unique_var
-        self._id_var_uni = [ self.variables.index(unique_var) for unique_var in self.unique_var ]
-        self._id_var_lev = [ self.variables.index(var) for var in self.variables if not var in self.unique_var ]
+        self._id_var_uni = [ self.used_variables.index(unique_var) for unique_var in self.unique_var ]
+        self._id_var_lev = [ self.used_variables.index(var) for var in self.used_variables if not var in self.unique_var ]
 
     def __separate_uniques(self, X):
         X_u = X[:, -1, self._id_var_uni]

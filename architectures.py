@@ -152,7 +152,6 @@ def Bidir_Casual_Conv(list_of_kernel_s, list_of_filters, ups, pooling, in_channe
 
     Conv1u = [I_avg]
     Conv1d = [I_avg_flip]
-    ACT = []
 
     # Normal
     for i in range(len(list_of_filters[0])):

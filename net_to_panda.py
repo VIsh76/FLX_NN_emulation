@@ -27,7 +27,7 @@ def Convert_all_from(in_folder='Data', out_folder='Data'):
 			input_name  = os.path.join(data_folder,f_name)
 			output_name = os.path.join(out_folder, f_name)
 
-			fully_convert_file(input_name, output_name, header = header, div=5)
+			fully_convert_file(input_name, output_name, header = header, div=(5,5))
 			print('---------')
 
 def select(data, n0, p0, n1,p1, lev):
@@ -64,27 +64,28 @@ def from_net_to_pd(x, n_beg, p_beg, n_end, p_end,  header, lev):
 
 
 def fully_convert_file(src, out, div, header, extension='.hdf5'):
-    x = Dataset(src)
+	x = Dataset(src)
+	n = x['Xdim'].shape[0]
+	p   = x['Ydim'].shape[0]
+	lev = x['lev'].shape[0]
 
-    n   = x['Xdim'].shape[0]
-    p   = x['Ydim'].shape[0]
-    lev = x['lev'].shape[0]
+	n_step = int(n/div[0])
+	p_step = int(p/div[1])
 
-    n_step = int(n/div)
-    p_step = int(p/div)
+	n0 = 0
+	p0 = 0
+	n1 = n_step
+	p1 = p_step
 
-    n0 = 0
-    p0 = 0
-    n1 = n_step
-    p1 = p_step
-
-    out_name = os.path.splitext(out)[0]
-
-    for i in range(5):
-        print(i)
-        dataf = from_net_to_pd(x, n0,p0,n1, p1,header, lev=lev)
-        dataf.to_hdf(out_name+'_'+str(i)+extension, key='s')
-        n0 += n_step
-        p0 += p_step
-        n1 += n_step
-        p1 += p_step
+	out_name = os.path.splitext(out)[0]
+	for i in range(div[0]):
+		for j in range(div[1]):
+			print(i,j)
+			dataf = from_net_to_pd(x, n0,p0,n1, p1,header, lev=lev)
+			dataf.to_hdf(out_name+'_'+str(i*div[1]+j)+extension, key='s')
+			p1 += p_step
+			p0 += p_step
+		n0 += n_step
+		n1 += n_step
+		p1 = p_step
+		p0 = 0

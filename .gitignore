@@ -7,8 +7,10 @@
 # Images
 *.png
 *.jpg
-#
+# JSON
 *.json
+# Pickle
+*.pickle
 # Python folder and files
 __pycache__
 venv

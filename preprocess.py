@@ -13,7 +13,11 @@ class Preprocess(object):
     def new_vars(self):
         return []
 
-    def __call__(self, x):
+    @property
+    def eliminated_vars(self):
+        return []
+
+    def __call__(self, x, headers=None):
         return x
 
     def fit(self, x):
@@ -22,6 +26,37 @@ class Preprocess(object):
 
     def __str__(self):
         return 'type : {} \nfitted : {} \nvalues : {} \n  '
+
+
+class VarSuppression(Preprocess):
+    """
+    List of input variables are takken away from the input and unsed
+    """
+    def __init__(self, list_of_suppressed_vars):
+        super().__init__()
+        self._list_of_suppressed_vars = list_of_suppressed_vars
+
+    @property
+    def eliminated_vars(self):
+        return(self._list_of_suppressed_vars)
+
+    def __call__(self, x, header):
+        id_var_used = [ header.index(var) for var in header if not var in self._list_of_suppressed_vars ]
+        return(x[:,id_var_used])
+
+
+class SetToZero(Preprocess):
+    """
+    List of input variables are set to 0 and unsed for the training
+    """
+    def __init__(self, set_to_zero):
+        super().__init__()
+        self._list_of_suppressed_vars = list_of_suppressed_vars
+
+    def __call__(self, x, header):
+        id_to_zero = [ header.index(var) for var in header if var in self._list_of_suppressed_vars ]
+        x[:,id_var_used]*=0
+        return(x)
 
 
 class Normalizer(Preprocess):
@@ -33,7 +68,7 @@ class Normalizer(Preprocess):
         self.m = 0
         self.std = 1
 
-    def __call__(self, x):
+    def __call__(self, x, headers=None):
         x -= self.m
         x /= self.std
         return x
@@ -65,7 +100,7 @@ class Zero_One(Preprocess):
         self.max = 1
         self.min = 1
 
-    def __call__(self, x):
+    def __call__(self, x, headers=None):
         x -= self.min
         x /= (self.max-self.min)
         return x
@@ -98,7 +133,7 @@ class Level_Normalizer(Preprocess):
         self.norm = 1
         self.use_renorm = use_renorm
 
-    def __call__(self, x):
+    def __call__(self, x, headers=None):
         if self.fitted:
             x-= self.L/ self.norm
         else:
@@ -259,7 +294,6 @@ class FKernel(Kernel):
         for i, v1 in enumerate(header):
             if v1 in self.vars:
                 xm = self.func(self.gamma * x[:, i, :]).reshape(x.shape[0], 1, x.shape[2])
-                print(self.gamma * x[:, i, :])
                 x = np.concatenate((x, xm), axis=1)
         return x
 
