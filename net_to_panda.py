@@ -20,8 +20,9 @@ def Convert_all_from(in_folder='Data', out_folder='Data', div=(5,5), use_selecti
 	for f_name in lst_files:
 		if os.path.isfile(os.path.join(data_folder , f_name)) and '_in.lcv' in  f_name:
 			in_f = True
-			ilist = np.random.choice(np.arange(div[0]), use_selection, replace=False)
-			jlist = np.random.choice(np.arange(div[1]), use_selection, replace=False)
+			K = np.random.choice(np.arange(div[0]*div[1]), use_selection, replace=False)
+			ilist = K // div[1]
+			jlist = K % div[1]
 			for i in range(2): # We load the in and out file at the same time
 				if in_f:
 					# Loading the 'in file'
@@ -57,7 +58,6 @@ def select(data, n0, p0, n1,p1, lev):
     Select elements in data
     """
     s = len(data.shape)
-    print(data.shape)
     if(s==4):
         v = data[0,:,n0:n1,p0:p1]
     elif(s==3):

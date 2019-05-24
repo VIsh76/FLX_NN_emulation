@@ -23,10 +23,14 @@ class F_and_plots:
     def __getitem__(self,i):
         return self.axes.flatten()[i]
 
-def Plot_Batch(x0, y0, header):
+def Plot_Batch(x, y0, header, swap=True):
     """ Plot the 11 variables of a batch"""
     f=plt.figure( figsize=(15,10), dpi=80)
-    for i in range(11):
+    if swap:
+        x0 = x.swapaxes(1,2).copy()
+    else:
+        x0 = x.copy()
+    for i in range(len(header)):
         ax= f.add_subplot(3,4,i+1)
         ax.set_title(header[i])
         for b in range(x0.shape[0]):
