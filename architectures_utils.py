@@ -44,6 +44,12 @@ def total_loss(y_true, y_pred):
     E += dfdts_loss(y_true, y_pred)
     return E
 
+def Up_Down_loss(y_true, y_pred):
+    E = flxd_loss(y_true, y_pred)
+    E += flxu_loss(y_true, y_pred)
+#    E += dfdts_loss(y_true, y_pred)
+    return E
+
 def lower_loss(y_true, y_pred, lev = 40):
     E = flxd_loss(y_true, y_pred)
     E += flxu_loss(y_true, y_pred)
@@ -128,14 +134,15 @@ class LossHistory(keras.callbacks.Callback):
     """
     Callback that keep an historic of the losses with more frequency
     """
-    def __init__(self, frequency=1000):
+    def __init__(self, frequency=1000, losses=['flxu_loss', 'flxd_loss', 'dfdts_loss', 'loss']):
         super(LossHistory, self).__init__()
         self.frequency=frequency
         self.current_batch=0
+        self._loss_name = losses
 
     @property
     def loss_name(self):
-        return(['flxu_loss', 'flxd_loss', 'dfdts_loss', 'loss'])
+        return(self._loss_name)
 
     def __getitem__(self,i):
         return(self.losses.__getitem__(i))
@@ -155,9 +162,9 @@ class LossHistory(keras.callbacks.Callback):
                 self.losses[n][-1] /= self.frequency
                 self.losses[n].append( logs.get(n))
 
-#    def on_train_end(self, logs={}):
-#        for n in self.loss_name:
-#            self.losses[n] = np.array(self.losses[n])
+    def on_epoch_end(self, logs={}):
+        for n in self.loss_name:
+            self.losses[n][-1] /= self.frequency
 
 def Return_print(x):
     """
@@ -170,6 +177,35 @@ def StructAssertion(L,Div):
     assert(len(L)==2)
     assert(len(L[0])==Div)
     assert(len(L[1])==Div)
+
+def Gradient_T(input, batch_size, model, header, lev=CST.lev(CST)):
+    """
+    Compute the impact of delta T (constant T add up) on the output
+    """
+    x_test = input
+    id = header.index('t')
+    k_constants = K.constant(x_test)
+
+    input11 = keras.layers.Input(batch_shape=(batch_size,1))
+    input12 = keras.layers.RepeatVector(n=lev)(input11)
+
+    def Sum_T(x, id):
+        np.repeat(x)
+
+    out11 = keras.layers.Lambda(lambda x: x + k_constants, axis=-1)(input12)
+
+
+    out12 = model_bd_avg_2(out11)
+    out13 = keras.layers.Lambda(lambda y: y[:,:,1] - y[:,:,0])(out12)
+
+    model1 = keras.models.Model(inputs=input11, outputs=out13)
+    model1.summary()
+    t=time.time()
+    gradients = [K.gradients(model1.get_output_at(0)[:,i], model1.input) for i in range(72)]
+    grad0 = K.function( [model1.input] , [gradients[i][0] for i in range(72)] )
+    ts = x_test[:,0,-1].reshape(x_test.shape[0], 1)
+    g = np.array(grad0([ts]))
+    return(0)
 
 
 def Generate_Log(models, history, callback, file ,seed):
