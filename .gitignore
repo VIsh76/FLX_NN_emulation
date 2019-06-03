@@ -2,6 +2,7 @@
 # Weights
 *.h5
 *.hdf5
+TrainedModels
 # nc4 files
 *.nc4
 # Images

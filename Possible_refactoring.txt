@@ -12,3 +12,7 @@ Remark :
 
 ideas :
 only consider higher lev
+
+
+####### VARIABLE STUDY :
+q : level normal correlated with itself 0.5

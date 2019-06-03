@@ -1,14 +1,12 @@
+import os
+import numpy as np
 import keras
 from keras.models import Sequential
-from keras.layers import Dense, LSTM, Activation, Flatten, Input, TimeDistributed, Concatenate
-from keras.layers import Conv1D, UpSampling1D, AveragePooling1D, SeparableConv1D
-from keras.layers import Bidirectional, Lambda, Reshape
+from keras.layers import LeakyReLU, Activation, ELU
 from keras.losses import mean_squared_error
 from keras import backend as K
 from keras import regularizers
 
-import os
-import numpy as np
 from contextlib import redirect_stdout
 from CST import CST
 # Simples architecture are saved if the need to reused them is presented
@@ -45,6 +43,13 @@ def total_loss(y_true, y_pred):
     E += flxu_loss(y_true, y_pred)
     E += dfdts_loss(y_true, y_pred)
     return E
+
+def lower_loss(y_true, y_pred, lev = 40):
+    E = flxd_loss(y_true, y_pred)
+    E += flxu_loss(y_true, y_pred)
+    E += dfdts_loss(y_true, y_pred)
+    return E
+
 
 # FC Losses
 def total_loss_fc(y_true, y_pred, lev=72, n_input=3):
@@ -83,9 +88,9 @@ class Activation_Generator():
 
     @property
     def keys(self):
-        return(['sigmoid', 'elu', 'softplus', 'tanh', 'relu', 'leakyrelu' ])
+        return(['sigmoid', 'elu', 'softplus', 'tanh', 'relu', 'leakyrelu','linear' ])
 
-    def __call__(self, act,name *arg):
+    def __call__(self, act,name, *arg):
         if act== 'sigmoid':
             la = Activation('sigmoid')
         elif act== 'softplus':
@@ -98,6 +103,8 @@ class Activation_Generator():
             la = Activation('selu')
         elif act== 'tanh':
             la = Activation('tanh')
+        elif act== 'linear':
+            la = Activation('linear')
         elif act=='leakyrelu':
             la = LeakyReLU(arg)
         elif act=='elu':
@@ -124,6 +131,7 @@ class LossHistory(keras.callbacks.Callback):
     def __init__(self, frequency=1000):
         super(LossHistory, self).__init__()
         self.frequency=frequency
+        self.current_batch=0
 
     @property
     def loss_name(self):
@@ -135,17 +143,21 @@ class LossHistory(keras.callbacks.Callback):
     def on_train_begin(self, logs={}):
         self.losses = dict()
         for n in self.loss_name:
-            self.losses[n] = []
+            self.losses[n] = [0]
 
     def on_batch_end(self, batch, logs={}):
         #print(logs['batch'])
-        if(batch%self.frequency==0):
+        if(batch%self.frequency!=0):
             for n in self.loss_name:
+                self.losses[n][-1] += logs.get(n)
+        else:
+            for n in self.loss_name:
+                self.losses[n][-1] /= self.frequency
                 self.losses[n].append( logs.get(n))
 
-    def on_train_end(self, logs={}):
-        for n in self.loss_name:
-            self.losses[n] = np.array(self.losses[n])
+#    def on_train_end(self, logs={}):
+#        for n in self.loss_name:
+#            self.losses[n] = np.array(self.losses[n])
 
 def Return_print(x):
     """

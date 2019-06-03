@@ -44,6 +44,8 @@ class VarSuppression(Preprocess):
         id_var_used = [ header.index(var) for var in header if not var in self._list_of_suppressed_vars ]
         return(x[:,id_var_used])
 
+    def __str__(self):
+        return 'type : Var Supression \n values : {} \n'.format(self._list_of_suppressed_vars)
 
 class SetToZero(Preprocess):
     """
@@ -257,6 +259,9 @@ class Kernel(Preprocess):
     def __call__(self, x, header):
         return x
 
+    def __str__(self):
+        return 'type : {} \nvariable : {} \nparams : {} \n  '
+
 
 class ProdKernel(Kernel):
     def __init__(self, var=[]):
@@ -281,13 +286,17 @@ class ProdKernel(Kernel):
     def new_vars(self):
         return [str(v1)+'*'+str(v2) for v1,v2 in self.vars]
 
+    def __str__(self):
+        return super().__str__().format("Prodkernel", self.vars, ' ')
+
 
 class FKernel(Kernel):
-    def __init__(self, func, gamma=1, var=[]):
-        Kernel.__init__(self, var)
+    def __init__(self, func, var, gamma=1):
+        Kernel.__init__(self, var=[])
         self.func = func
         self.gamma = gamma
         self.fname = str(func).split(' ')[1]
+        self.vars = var
 
     def __call__(self, x, header):
         """ header is the header of x"""
@@ -307,5 +316,8 @@ class FKernel(Kernel):
     @property
     def new_vars(self):
         return [self.fname+str(var) for var in self.vars]
+
+    def __str__(self):
+        return super().__str__().format("Fkernel", (self.vars, self.fname), self.gamma)
 
 ################### Dict Creation (to avoid recomputing)

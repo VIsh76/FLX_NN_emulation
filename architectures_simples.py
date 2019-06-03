@@ -70,11 +70,11 @@ def Weird_Averaged_Bidir(in_channel=11, out_channel=3):
     return modelbd
 
 
-def Upsampler(avg, pooling):
-    M = Sequential(name="Upsampler")
-    M.add(UpSampling1D(avg))
-    M.add(AveragePooling1D(pooling, padding='same', stride=avg))
-    return M
+def Upsampler(avg, pooling, input_shape):
+    Input0 = Input(shape=input_shape)
+    Up = UpSampling1D(avg)(Input0)
+    Avg = AveragePooling1D(pooling, padding='same', stride=avg)(Up)
+    return keras.Model(Input0, Avg)
 
 
 def Add_Upsampling(M_seq, shape, avg, pooling):
