@@ -12,6 +12,8 @@ TrainedModels
 *.json
 # Pickle
 *.pickle
+# npy
+*.npy
 # Python folder and files
 __pycache__
 venv

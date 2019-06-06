@@ -55,23 +55,58 @@ def Plot_one_profile(y):
 
 def Plot_triple_diff_separated(F,y,y0, header_y, sep=0,  lev=72, j = 0):
     f = plt.figure( figsize=(15,8) )
-    for i in range(3):
+    nv = len(header_y)
+    for i in range(nv):
         F[i].plot(np.flip(y[:,:,i].T[:,j]) , np.arange(lev))
         F[i].plot(np.flip(y0[:,:,i].T[:,j]) , np.arange(lev))
         F[i].legend(["truth", "pred"])
         F[i].set_title(header_y[i]+' full column')
         if(sep>0):
-            F[i+3].plot(np.flip(y[:,:,i].T[sep:, j]) , np.arange(lev-sep))
-            F[i+3].plot(np.flip(y0[:,:,i].T[sep:, j]) , np.arange(lev-sep))
-            F[i+3].legend(["truth", "pred"])
-            F[i+3].set_title(header_y[i]+' low layers')
+            F[i+nv].plot(np.flip(y[:,:,i].T[sep:, j]) , np.arange(lev-sep))
+            F[i+nv].plot(np.flip(y0[:,:,i].T[sep:, j]) , np.arange(lev-sep))
+            F[i+nv].legend(["truth", "pred"])
+            F[i+nv].set_title(header_y[i]+' low layers')
             #
-            F[i+6].plot(np.flip(y[:,:,i].T[:sep,j]) , sep+np.arange(sep))
-            F[i+6].plot(np.flip(y0[:,:,i].T[:sep,j]) , sep+np.arange(sep))
-            F[i+6].legend(["truth", "pred"])
-            F[i+6].set_title(header_y[i]+' high layers')
+            F[i+2*nv].plot(np.flip(y[:,:,i].T[:sep,j]) , sep+np.arange(sep))
+            F[i+2*nv].plot(np.flip(y0[:,:,i].T[:sep,j]) , sep+np.arange(sep))
+            F[i+2*nv].legend(["truth", "pred"])
+            F[i+2*nv].set_title(header_y[i]+' high layers')
 
+def reconstruct(T, div=5):
+    _,y,x =T.shape
+    T0 = np.zeros((div*x,div*y))
+    for i in range(div):
+        for j in range(div):
+            if(i*div+j<len(T[:,0])):
+                T0[i*x:(i+1)*x, j*y:(j+1)*y] = T[i*div+j].T
+    return(T0)
+
+
+def Get_Var(generator, header, var, op, y_v=False):
+    idx = header.index(var)
+    T=[]
+    if(op==0):
+        OP = lambda x: x[:,0, idx]
+    if(op==-1):
+        OP = lambda x: x[:,-1, idx]
+    if(op==1):
+        OP = lambda x: np.sum(abs(x[:,:, idx]), axis=1)
+    if(op==2):
+        OP = lambda x: np.mean(abs(x[:,:, idx]), axis=1)
+    if(op==3):
+        OP = lambda x: np.mean(np.square(x[:,:, idx]), axis=1)
+    if(not y_v):
+        for x, _ in generator:
+            T.append(OP(x))
+    else:
+        for _, y in generator:
+            T.append(OP(y))
+    T = np.array(T)    
+    return(T)
 ########## GET DICTIONNARY :
+
+
+
 fct = []
 for i in range(5):
     fct.append(Zero_One())
