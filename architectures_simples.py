@@ -7,11 +7,40 @@ from keras.losses import mean_squared_error
 from keras import backend as K
 from keras import regularizers
 
+from architectures_utils import Name
+
 import os
 import numpy as np
 from contextlib import redirect_stdout
 from CST import CST
 # Simples architecture are saved if the need to reused them is presented
+
+
+
+# Small Models :
+
+
+def Upsampler(avg, pooling, input_shape):
+    """
+    Generate a Upsampler model
+    """
+    Input0 = Input(shape=input_shape)
+    Up = UpSampling1D(avg)(Input0)
+    Avg = AveragePooling1D(pooling, padding='same', stride=avg)(Up)
+    return keras.Model(Input0, Avg)
+
+
+def Divide_Recombine(o_channel, in_channel,lev=CST.lev(CST), reg=0.001):
+    """
+    Generate several Dense layer from the same input and combine them
+    """
+    Input0 = Input(shape=(in_channel,lev), name='Input_RC0')
+    Input1 = Flatten(name='Last_flatten')(Input0)
+    D = [ Dense(lev, kernel_regularizer = keras.regularizers.l2(reg), name=Name('Last_Dense',i))(Input1) for i in range(o_channel)]
+    R = [Reshape(target_shape=(lev,1))(D[i]) for i in range(o_channel)]
+    C = keras.layers.Concatenate(axis=-1, name='Last_Concat')(R)
+    model = keras.Model(Input0, C)
+    return(model)
 
 
 #### ARCHITECTURES
@@ -70,12 +99,6 @@ def Weird_Averaged_Bidir(in_channel=11, out_channel=3):
     return modelbd
 
 
-def Upsampler(avg, pooling, input_shape):
-    Input0 = Input(shape=input_shape)
-    Up = UpSampling1D(avg)(Input0)
-    Avg = AveragePooling1D(pooling, padding='same', stride=avg)(Up)
-    return keras.Model(Input0, Avg)
-
 
 def Add_Upsampling(M_seq, shape, avg, pooling):
     newInput = Input( shape=shape, name="Input_1")
@@ -84,6 +107,7 @@ def Add_Upsampling(M_seq, shape, avg, pooling):
     newOutputs2 = M_seq(newOutputs)
     model2 = keras.Model(newInput, newOutputs2)
     return model2
+
 
 #### Fully Conv :
 def Bidir_Casual_Conv(list_of_kernel_s, list_of_filters, ups, pooling, in_channel, o_channel, lev=CST.lev(CST)):

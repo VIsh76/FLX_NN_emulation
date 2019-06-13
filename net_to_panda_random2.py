@@ -38,10 +38,11 @@ def Convert_random_all_from(Xdim, Ydim, in_folder, out_folder, div=5):
 					X =  pd.read_hdf(lst_files[l*div+k])
 					if(len(used_n_ids)*len(used_p_ids)>0):
 						X = X.iloc[]
-
-
-
-
+						if(build):
+							Xf = Xf.append(X)
+						else:
+							build=True
+							Xf = X.copy()
 
 	for f_name in lst_files:
 		if os.path.isfile(os.path.join(data_folder , f_name)) and '_in.lcv' in  f_name:

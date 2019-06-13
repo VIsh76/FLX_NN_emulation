@@ -50,7 +50,6 @@ def Convert_all_from(in_folder='Data', out_folder='Data', div=(5,5), use_selecti
 
 					random_convert_file(input_name, output_name, div=div, random_ids=(ilist, jlist), header=header)
 
-
 			print('---------')
 
 def select(data, n0, p0, n1,p1, lev):

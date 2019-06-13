@@ -162,9 +162,9 @@ class LossHistory(keras.callbacks.Callback):
                 self.losses[n][-1] /= self.frequency
                 self.losses[n].append( logs.get(n))
 
-    def on_epoch_end(self, logs={}):
-        for n in self.loss_name:
-            self.losses[n][-1] /= self.frequency
+#    def on_epoch_end(self, logs={}):
+#        for n in self.loss_name:
+#            self.losses[n][-1] /= self.frequency
 
 def Return_print(x):
     """

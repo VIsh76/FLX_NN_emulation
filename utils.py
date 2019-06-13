@@ -18,24 +18,30 @@ class F_and_plots:
     def __init__(self,shape, figsize=(15,10)):
         f, axes = plt.subplots(shape[0], shape[1], figsize=figsize)
         self.f = f
+        self.shape = shape
         self.axes = axes
 
     def __getitem__(self,i):
-        return self.axes.flatten()[i]
+        if(self.shape[0]*self.shape[1])==1:
+            return(self.axes)
+        else:
+            return self.axes.flatten()[i]
 
 def Plot_Batch(x, y0, header, swap=True):
     """ Plot the 11 variables of a batch"""
-    f=plt.figure( figsize=(15,10), dpi=80)
+    L = len(header)
+    f=plt.figure( figsize=(20, ((L+1)//4+1)*4), dpi=80)
     if swap:
         x0 = x.swapaxes(1,2).copy()
     else:
         x0 = x.copy()
+    ligne = (L+1)//4 + 1
     for i in range(len(header)):
-        ax= f.add_subplot(3,4,i+1)
+        ax= f.add_subplot(ligne, 4, i+1)
         ax.set_title(header[i])
         for b in range(x0.shape[0]):
             ax.plot(np.flip(x0[b,i,:]), np.arange(len(x0[b,i,:])))
-    ax= f.add_subplot(3,4,12)
+    ax= f.add_subplot(ligne, 4, ligne*4)
     ax.set_title('flx')
     for b in range(y0.shape[0]):
         ax.plot(np.flip(y0[b]), np.arange(len(y0[b])))
@@ -52,6 +58,13 @@ def Plot_one_profile(y):
     plt.plot(np.flip(y), np.arrange(len(y[0])) )
     plt.show()
 
+def Plot_diff(F, y,y0, header_y, lev=72, J = [0], titles=False):
+    for ind,i in enumerate(J):
+        F[ind].plot(np.flip(y[i,:,0].T) , np.arange(lev))
+        F[ind].plot(np.flip(y0[i,:,0].T) , np.arange(lev))
+        F[ind].legend(["truth", "pred"])
+        if titles !=False:
+            F[ind].set_title(titles[ind])
 
 def Plot_triple_diff_separated(F,y,y0, header_y, sep=0,  lev=72, j = 0):
     f = plt.figure( figsize=(15,8) )
@@ -101,7 +114,7 @@ def Get_Var(generator, header, var, op, y_v=False):
     else:
         for _, y in generator:
             T.append(OP(y))
-    T = np.array(T)    
+    T = np.array(T)
     return(T)
 ########## GET DICTIONNARY :
 

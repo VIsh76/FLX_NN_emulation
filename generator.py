@@ -23,7 +23,7 @@ class Basic_Generator(keras.utils.Sequence):
         # idx
         self.idx_folder = np.arange(self._nb_dir)
         self.idx_file = np.arange(self._div)
-        self.idx_el = np.arange(self.Xdim*self.Ydim)
+        self.idx_el = np.arange(self.X_x_Y)
         self.current_b = 0
         self.current_folder = 0
         self.current_file = 0
@@ -51,8 +51,9 @@ class Basic_Generator(keras.utils.Sequence):
         self.variables = list(x.columns.levels[0])
         self.used_variables = list(x.columns.levels[0])
         self.variables_pred = list(y.columns.levels[0])
-        self.Xdim = len(x.index.levels[0])
-        self.Ydim = len(x.index.levels[1])
+        self.Xdim = len(x.index.levels[0]) # doesn't work with randoms
+        self.Ydim = len(x.index.levels[1]) # doesn't work with randoms
+        self.X_x_Y = len(x.index)
         self.lev = len(x.columns.levels[1])
 
     def load_a_path(self, id_fold, id_file):
@@ -88,7 +89,7 @@ class Basic_Generator(keras.utils.Sequence):
 
     def __len__(self):
         'batch per size'
-        l = int( (self.Xdim * self.Ydim // self.batch_size) * self._div * self._nb_dir)
+        l = int( (self.X_x_Y // self.batch_size) * self._div * self._nb_dir)
         if (self.max_b > 0):
             return(min(self.max_b, l))
         return(l)
@@ -127,7 +128,7 @@ class Basic_Generator(keras.utils.Sequence):
 
     @property
     def batch_per_file(self):
-        return( self.Xdim*self.Ydim // self.batch_size)
+        return(self.X_x_Y // self.batch_size)
 
     def index_to_ids(self,index):
         index0 = index
@@ -185,13 +186,13 @@ class Preprocessed_Generator(Basic_Generator):
         self.reconfigured = True
 
     def apply_preprocess_x(self,X):
-        X = np.array(X).reshape(self.Xdim*self.Ydim , len(self.variables)-len(self._new_variables), self.lev)
+        X = np.array(X).reshape(self.X_x_Y , len(self.variables)-len(self._new_variables), self.lev)
         for p in self.preprocess_x:
             X = p(X, self.variables)
         return X
 
     def apply_preprocess_y(self,Y):
-        Y = np.array(Y).reshape(self.Xdim*self.Ydim, len(self.variables_pred), self.lev+1)
+        Y = np.array(Y).reshape(self.X_x_Y, len(self.variables_pred), self.lev+1)
         for p in self.preprocess_y:
             Y = p(Y, self.variables_pred)
         return Y
@@ -231,25 +232,81 @@ class Full_Diff_Generator(Preprocessed_Generator):
                                                     preprocess_x=preprocess_x, preprocess_y=[])
 
     def apply_preprocess_y(self,Y):
-        Y = np.array(Y).reshape(self.Xdim*self.Ydim, len(self.variables_pred), self.lev+1)
-        idflx = np.array( [self.variables_pred.index(name) for name in self.new_variables_pred])
+        Y = np.array(Y).reshape(self.X_x_Y, len(self.variables_pred), self.lev+1)
+        idflx = np.array( [ self.variables_pred.index(name) for name in self.new_variables_pred])
         Y = Y[:, idflx, 1:] - Y[:, idflx, :-1]
         Y = Y.swapaxes(1,2)
         return Y
 
-#    def __data_generation(self, folder_id, file_id, el_ids):
-#        'Generates data containing batch_size samples'
-#        return super(Full_Diff_Generator, self).__data_generation(folder_id, file_id, el_ids)
-
-class Diff_Generator(Full_Diff_Generator):
+######## AE :
+class AE_Generator(Full_Diff_Generator):
     def __init__(self, folder=data_folder, train=True, batch_size=64, shuffle=True, \
-                 custom_b_p_e = 0, preprocess_x=[]):
-        super(Diff_Generator, self).__init__(folder, train, batch_size, shuffle, custom_b_p_e, \
-                                                    preprocess_x=preprocess_x, chosen_var=['flx'])
+                 custom_b_p_e = 0, preprocess_x=[],  chosen_var = ['flxd','flxu'], stash_x=True):
+        self.stash_x = stash_x # conserve input x variables or not
+        super(AE_Generator, self).__init__(folder, train, batch_size, shuffle, custom_b_p_e, \
+                                                    preprocess_x=preprocess_x, chosen_var=chosen_var)
+
+    def __getitem__(self, index):
+        X,Y = super(AE_Generator, self).__getitem__(index)
+        if self.stash_x:
+            X = Y.copy()
+        else:
+            X = np.concatenate((X,Y),axis=-1)
+        if(Y.shape[-1]==1):
+            Y=Y.reshape(Y.shape[0],Y.shape[1])
+        return X,Y
+
+
+class FLX_AE_Generator(Full_Diff_Generator):
+    """
+    Has flxu, flxd as input and flx as output, work as an AE
+    """
+    def __init__(self, folder=data_folder, train=True, batch_size=64, shuffle=True, \
+                 custom_b_p_e = 0, preprocess_x=[],  chosen_var = ['flxd','flxu']):
+        super(FLX_AE_Generator, self).__init__(folder, train, batch_size, shuffle, custom_b_p_e, \
+                                                    preprocess_x=[], chosen_var=chosen_var)
+
+    def change_y(self,Y):
+        """
+        Get FLX (the output into Y0)
+        """
+#        Y= super(FLX_AE_Generator,self).apply_preprocess_y(Y)
+        Y0 = -Y[:,:,0] + Y[:,:,1]
+        if(Y0.shape[-1]==1):
+            Y0 = Y0.reshape(Y0.shape[0],Y0.shape[1])
+        return Y,Y0
+
+    def __getitem__(self, index):
+        X,Y = super(FLX_AE_Generator, self).__getitem__(index)
+        X,Y = self.change_y(Y)
+        return X,Y
+    
+
+class FLX_Generator(Full_Diff_Generator):
+    def __init__(self, folder=data_folder, train=True, batch_size=64, shuffle=True, \
+                 custom_b_p_e = 0, preprocess_x=[], chosen_var=['flxu', 'flxd']):
+        super(FLX_Generator, self).__init__(folder, train, batch_size, shuffle, custom_b_p_e, \
+                                                    preprocess_x=preprocess_x, chosen_var=['flxu', 'flxd'])
 
     def apply_preprocess_y(self,Y):
-        Y= super(Diff_Generator,self).apply_preprocess_y(Y)
-        Y = Y[:,:,0]
+        Y= super(FLX_Generator,self).apply_preprocess_y(Y)
+        Y = -Y[:,:,0] + Y[:,:,1]
+        if(Y.shape[-1]==1):
+            Y = Y.reshape(Y.shape[0],Y.shape[1])
+        return Y
+    
+
+class FLX_Generator(Full_Diff_Generator):
+    def __init__(self, folder=data_folder, train=True, batch_size=64, shuffle=True, \
+                 custom_b_p_e = 0, preprocess_x=[], chosen_var=['flxu', 'flxd']):
+        super(FLX_Generator, self).__init__(folder, train, batch_size, shuffle, custom_b_p_e, \
+                                                    preprocess_x=preprocess_x, chosen_var=['flxu', 'flxd'])
+
+    def apply_preprocess_y(self,Y):
+        Y= super(FLX_Generator,self).apply_preprocess_y(Y)
+        Y = -Y[:,:,0] + Y[:,:,1]
+        if(Y.shape[-1]==1):
+            Y = Y.reshape(Y.shape[0],Y.shape[1])
         return Y
 
 class Up_and_Down_Generator(Full_Diff_Generator):

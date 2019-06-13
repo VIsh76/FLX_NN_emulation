@@ -125,6 +125,36 @@ class Zero_One(Preprocess):
         return super().__str__().format("Zero_One", self.fitted, (self.max, self.min))
 
 
+class Binary(Preprocess):
+    """
+    Set value to 0 when x=min, 1 if x!=min
+    """
+    def __init__(self):
+        super().__init__()
+        self.min = 1
+
+    def __call__(self, x, headers=None):
+        x = (x - self.min) / x
+        return x
+
+    def fit(self, x):
+        self.fitted=True
+        self.min = np.min(x)
+        self.max = np.max(x)
+
+    def set_params(self, x, y):
+        self.fitted = True
+        self.min = x
+        self.max = y
+
+    @property
+    def params(self):
+        return self.min, self.max
+
+    def __str__(self):
+        return super().__str__().format("Zero_One", self.fitted, (self.max, self.min))
+
+
 class Level_Normalizer(Preprocess):
     """
     Set the mean to 0 for every level
@@ -147,6 +177,7 @@ class Level_Normalizer(Preprocess):
 
     def fit(self, x):
         self.L = np.mean(x, axis=0)
+        self.fitted = True
         if self.renorm:
             self.norm = np.std(x, axis=0)[-1]
 
@@ -185,16 +216,29 @@ class DictPrepross(Preprocess):
             self.dict[k] = eval(pd_file['Type'][i].split('.')[-1])()
             self.dict[k].set_params(pd_file['P1'][i], pd_file['P2'][i])
 
-    def fitonGen(self, B):
+    def fitonGen(self, B, axis):
         """ Generator must generate entire file """
         header = B.variables
-        for k in self.dict.keys():
-            id = header.index(k)
-            x0 = B[0][0][:, id, :]
-            for i,(x,y) in tqdm(enumerate(B)):
-                if i > 0:
-                    x0 = np.concatenate( (x0, x[:, id, :]), axis=0)
-            self[k].fit(x0)
+        if(axis==1):
+            for k in self.dict.keys():
+                id = header.index(k)
+                x0 = B[0][0][:, id, :]
+                for i,(x,y) in enumerate(B):
+                    if i > 0:
+                        x0 = np.concatenate( (x0, x[:, id, :]), axis=0)
+                self[k].fit(x0)
+        elif axis==2:
+            for k in self.dict.keys():
+                id = header.index(k)
+                x0 = B[0][0][:, :, id]
+                for i,(x,y) in enumerate(B):
+                    if i > 0:
+                        x0 = np.concatenate( (x0, x[:, :, id]), axis=0)
+                self[k].fit(x0)
+        else:
+            assert(False)
+
+
     @property
     def new_vars(self):
         output = []
@@ -315,7 +359,7 @@ class FKernel(Kernel):
 
     @property
     def new_vars(self):
-        return [self.fname+str(var) for var in self.vars]
+        return [self.fname+'_'+str(var) for var in self.vars]
 
     def __str__(self):
         return super().__str__().format("Fkernel", (self.vars, self.fname), self.gamma)
