@@ -221,7 +221,6 @@ class Preprocessed_Generator(Basic_Generator):
         Y = self.Y[el_ids]
         X=X.swapaxes(1,2)
         return X,Y
-
 ######## Differenciate Y and take only differences in flx as the output
 
 class Full_Diff_Generator(Preprocessed_Generator):
@@ -280,7 +279,7 @@ class FLX_AE_Generator(Full_Diff_Generator):
         X,Y = super(FLX_AE_Generator, self).__getitem__(index)
         X,Y = self.change_y(Y)
         return X,Y
-    
+
 
 class FLX_Generator(Full_Diff_Generator):
     def __init__(self, folder=data_folder, train=True, batch_size=64, shuffle=True, \
@@ -294,7 +293,7 @@ class FLX_Generator(Full_Diff_Generator):
         if(Y.shape[-1]==1):
             Y = Y.reshape(Y.shape[0],Y.shape[1])
         return Y
-    
+
 
 class FLX_Generator(Full_Diff_Generator):
     def __init__(self, folder=data_folder, train=True, batch_size=64, shuffle=True, \
@@ -308,6 +307,93 @@ class FLX_Generator(Full_Diff_Generator):
         if(Y.shape[-1]==1):
             Y = Y.reshape(Y.shape[0],Y.shape[1])
         return Y
+
+#### CloudyGenerator
+class CloudyGenerator(FLX_Generator):
+    """
+    Can generate data with no cloud. Suffle is set to 1 to take the right number of element in each subset
+    """
+    def __init__(self, folder=data_folder, train=True, batch_size=64, \
+                 custom_b_p_e = 0, preprocess_x=[], no_cloudi=True, no_cloudl=True,  chosen_var = ['flxd','flxu','dfdts','flx']):
+        self.no_cloudi = no_cloudi
+        self.no_cloudl = no_cloudl
+        super(CloudyGenerator, self).__init__(folder, train, batch_size, shuffle=1, custom_b_p_e=custom_b_p_e, \
+                                                    chosen_var=chosen_var, preprocess_x=preprocess_x)
+        len(self)
+
+    def apply_preprocess_x(self, X):
+        X = super(CloudyGenerator,self).apply_preprocess_x(X)
+        id_el = np.ones(X.shape[0]).astype(bool)
+
+        if self.no_cloudl:
+            id_el = id_el * (np.max(X[:, self.ql_id, :], axis=1)==0).astype(bool)
+        if self.no_cloudi:
+            id_el = id_el * (np.max(X[:, self.qi_id, :], axis=1)==0).astype(bool)
+        X = X[id_el]
+
+        if self.no_cloudi*self.no_cloudl:
+            X = np.delete(X, [self.qi_id, self.ql_id], axis=1)
+        elif self.no_cloudi:
+            X = np.delete(X, [self.qi_id], axis=1)
+        elif self.no_cloudl:
+            X = np.delete(X, [self.ql_id], axis=1)
+
+        self.id_cloud = id_el.copy()
+        return X
+
+    def apply_preprocess_y(self, Y):
+        Y = super(CloudyGenerator, self).apply_preprocess_y(Y)
+        Y = Y[self.id_cloud]
+        return(Y)
+
+    def _reconfigure_outputs(self):
+        super(CloudyGenerator, self)._reconfigure_outputs()
+
+        self.qi_id = self.used_variables.index('qi')
+        self.ql_id = self.used_variables.index('ql')
+
+        if self.no_cloudl:
+            a = self.used_variables.index('ql')
+            del(self.used_variables[a])
+        if self.no_cloudi:
+            a = self.used_variables.index('qi')
+            del(self.used_variables[a])
+
+    def index_to_ids(self,index):
+        index0 = index
+        file=0
+        while index0 >= self.n_per_file[file]:
+            index0-=self.n_per_file[file]
+            file+=1
+        folder_id = file // self._div
+        file_id = file % self._div
+        el_id = index0
+        self.reload(folder_id, file_id)
+        return folder_id, file_id, el_id
+
+    def reload(self, folder_id, file_id):
+        if folder_id != self.current_folder or file_id != self.current_file:
+            super(Full_Diff_Generator, self).reload(folder_id, file_id)
+            self.idx_el = np.arange(self.batch_size*self.n_per_file[folder_id*self._div + file_id])
+
+    def __getitem__(self, index):
+        X,Y = super(CloudyGenerator, self).__getitem__(index)
+        return X,Y
+
+    def __len__(self):
+        if(self.max_b==0):
+            self.n_per_file = np.arange(self.batch_per_file)
+            N = []
+            for i in range(len(self.List_of_dir)):
+                for j in range(self._div):
+                    self.reload(i,j)
+                    N.append(self.X.shape[0])
+            N = [n//self.batch_size for n in N]
+            self.n_per_file = N
+            self.max_b = np.sum(np.array(N))
+            self.reload(0,0)
+        return(self.max_b)
+
 
 class Up_and_Down_Generator(Full_Diff_Generator):
     def __init__(self, folder=data_folder, train=True, batch_size=64, shuffle=True, \
