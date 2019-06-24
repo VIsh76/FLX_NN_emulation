@@ -2,76 +2,65 @@ import pandas as pd
 import numpy as np
 import os
 import tables
-from netCDF4 import Dataset
 
+#Xdim=144, Ydim=864
 ### This file contains the function from_net_to_pd which convert a netcf4 file into a pd dataframe with more random batches
 # Sadly the execution time is too slow because of the randomisation (it should take more than 1h to convert 1 file)
 
 def Convert_random_all_from(Xdim, Ydim, in_folder, out_folder, div=5):
-	"""
-	Convert all files in in_folder to hdf5, divide them into div and save them in out_folder
-	each generated folder correspond to one file.
-	use_selection = 0 : the entire file is converted (warning files are heavy)
-	use_selection > 0 : 'use_selection' files are selected randomly from each dataset
-	"""
-	data_folder = in_folder
-	lst_files = os.listdir(data_folder)
-	lst_files.sort()
-	out_folder0 = out_folder
+    """
+    Convert all files in in_folder to hdf5, divide them into div and save them in out_folder
+    each generated folder correspond to one file.
+    use_selection = 0 : the entire file is converted (warning files are heavy)
+    use_selection > 0 : 'use_selection' files are selected randomly from each dataset
+	Xdim : dimension of a division
+	Ydim : dimension of a division
+    """
+    data_folder = in_folder
+    lst_files = os.listdir(data_folder)
+    lst_files.sort()
+    out_folder0 = out_folder
 
-	ids_n = np.arange(Xdim); np.random.shuffle(ids_n)
-	ids_p = np.arange(Ydim); np.random.shuffle(ids_p)
+    ids_n = np.arange(Xdim*div); np.random.shuffle(ids_n)
+    ids_p = np.arange(Ydim*div); np.random.shuffle(ids_p)
 
-	ndiv = Xdim // div
-	pdiv = Ydim // div
+    ndiv = Xdim
+    pdiv = Ydim
 
-	for i in range(div):
-		for j in range(div):
-			c_ids_n = ids_n[i*ndiv:(i+1)*ndiv]
-			c_ids_p = ids_p[j*pdiv:(j+1)*pdiv]
+    for i in range(div):
+        for j in range(div):
+            name_out, extension = os.path.splitext(lst_files[i*div+j+25])
+            name_in, extension = os.path.splitext(lst_files[i*div+j])
 
-			build = False
-			for l in range(div):
-				for k in range(div):
-					used_n_ids = c_ids_n[np.where(np.logical_and(l*ndiv <= c_ids_n, c_ids_n < (l+1)*ndiv )]
-					used_p_ids = c_ids_p[np.where(np.logical_and(k*ndiv <= c_ids_p, c_ids_p < (k+1)*ndiv )]
-					X =  pd.read_hdf(lst_files[l*div+k])
-					if(len(used_n_ids)*len(used_p_ids)>0):
-						X = X.iloc[]
-						if(build):
-							Xf = Xf.append(X)
-						else:
-							build=True
-							Xf = X.copy()
+            name_out = os.path.join(out_folder, name_out+extension)
+            name_in = os.path.join(out_folder, name_in+extension)
+            print(name_in, name_out)
 
-	for f_name in lst_files:
-		if os.path.isfile(os.path.join(data_folder , f_name)) and '_in.lcv' in  f_name:
-			in_f = True
-			print(Xdim, Ydim)
-
-			for i in range(2): # We load the in and out file at the same time
-				if in_f:
-					# Loading the 'in file'
-					in_f = False
-				else:
-					f_name = f_name.split('_in')[0]+'_out'+f_name.split('_in')[1]
-				f = Dataset(os.path.join(data_folder, f_name))
-				x = f.variables
-				print(f_name)
-				header = list(x.keys())[6:] # 6 first var are dims, X,Y,lat, lon, time,
-
-				folder_name = f_name.split('.')[-2]
-				out_folder = os.path.join( out_folder0, folder_name)
-
-				if not os.path.isdir(out_folder):
-				    print('Creating out_folder', out_folder)
-				    os.mkdir(out_folder)
-
-				input_name  = os.path.join(data_folder,f_name)
-				output_name = os.path.join(out_folder, f_name)
-
-				fully_random_convert_file(input_name, output_name, div, ids_n, ids_p, header=header)
-			print('---------')
+            c_ids_n = ids_n[i*ndiv:(i+1)*ndiv]
+            c_ids_p = ids_p[j*pdiv:(j+1)*pdiv]
+            build = False
+            for l in range(div):
+                for k in range(div):
+                    used_n_ids = c_ids_n[np.where(np.logical_and(l*ndiv <= c_ids_n, c_ids_n < (l+1)*ndiv ))]
+                    used_p_ids = c_ids_p[np.where(np.logical_and(k*pdiv <= c_ids_p, c_ids_p < (k+1)*pdiv ))]
+                    X =  pd.read_hdf(in_folder + lst_files[l*div+k])
+                    Y =  pd.read_hdf(in_folder + lst_files[l*div+k+25])
+                    if(len(used_n_ids)*len(used_p_ids)>0):
+                        used_n_ids = used_n_ids%ndiv
+                        used_p_ids = used_p_ids%pdiv
+                        ID_flatten = np.dot(used_p_ids.reshape(-1,1), used_n_ids.reshape(1,-1)).flatten()
+                        X = X.iloc[ID_flatten,  :]
+                        Y = Y.iloc[ID_flatten,  :]
+                        if(build):
+                            Xf = Xf.append(X)
+                            Yf = Yf.append(Y)
+                        else:
+                            build=True
+                            Xf = X.copy()
+                            Yf = Y.copy()
+            Xf.to_hdf(name_in, key='s')
+            Yf.to_hdf(name_out, key='s')
+    return(Xf,Yf)
 
 def select_rng(data, rd_n, rd_p, lev):
     """

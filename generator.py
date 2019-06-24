@@ -317,9 +317,11 @@ class CloudyGenerator(FLX_Generator):
                  custom_b_p_e = 0, preprocess_x=[], no_cloudi=True, no_cloudl=True,  chosen_var = ['flxd','flxu','dfdts','flx']):
         self.no_cloudi = no_cloudi
         self.no_cloudl = no_cloudl
+        self._is_cloud_init = False
         super(CloudyGenerator, self).__init__(folder, train, batch_size, shuffle=1, custom_b_p_e=custom_b_p_e, \
                                                     chosen_var=chosen_var, preprocess_x=preprocess_x)
         len(self)
+        self._is_cloud_init = True
 
     def apply_preprocess_x(self, X):
         X = super(CloudyGenerator,self).apply_preprocess_x(X)
@@ -359,6 +361,11 @@ class CloudyGenerator(FLX_Generator):
             a = self.used_variables.index('qi')
             del(self.used_variables[a])
 
+    def on_epoch_end(self):
+        super(CloudyGenerator, self).on_epoch_end()
+        if self._is_cloud_init:
+            self.idx_el = np.arange(self.batch_size*self.n_per_file[self.current_folder*self._div + self.current_file])
+
     def index_to_ids(self,index):
         index0 = index
         file=0
@@ -375,6 +382,8 @@ class CloudyGenerator(FLX_Generator):
         if folder_id != self.current_folder or file_id != self.current_file:
             super(Full_Diff_Generator, self).reload(folder_id, file_id)
             self.idx_el = np.arange(self.batch_size*self.n_per_file[folder_id*self._div + file_id])
+            if self.shuffle>0:
+                np.random.shuffle(self.idx_el)
 
     def __getitem__(self, index):
         X,Y = super(CloudyGenerator, self).__getitem__(index)
@@ -400,6 +409,80 @@ class Up_and_Down_Generator(Full_Diff_Generator):
                  custom_b_p_e = 0, preprocess_x=[]):
         super(Up_and_Down_Generator, self).__init__(folder, train, batch_size, shuffle, custom_b_p_e, \
                                                     preprocess_x=preprocess_x, chosen_var= ['flxd','flxu','dfdts'])
+
+#### Fully Connected
+def Regu_flx(y, M):
+    y_bin = (y>M)
+    y_pic = y_bin*y
+    y_avg = (1-y_bin)*y + (y_bin)*np.mean(y, axis=1).reshape(-1,1)
+
+    y_bin = np.expand_dims(y_bin, axis=2)
+    y_avg = np.expand_dims(y_avg, axis=2)
+    y_pic = np.expand_dims(y_pic, axis=2)
+    return(y_bin, y_pic, y_avg)
+
+# PIC GENERATOR
+class Pic_Generator(CloudyGenerator):
+    """
+    Generate FLX, its pics,
+    """
+    def __init__(self, folder=data_folder, train=True, batch_size=64, \
+                 custom_b_p_e = 0, preprocess_x=[], chosen_var = ['flxd','flxu'], threshold=50):
+        self.threshold = threshold
+        super(Pic_Generator, self).__init__(folder, train, batch_size, custom_b_p_e=custom_b_p_e, \
+                                    chosen_var=chosen_var, preprocess_x=preprocess_x)
+
+    def apply_preprocess_y(self, Y):
+        Y = super(Pic_Generator, self).apply_preprocess_y(Y)
+        y_bin, y_pic, y_avg = Regu_flx(Y, self.threshold)
+        Y = Y.reshape(Y.shape[0], Y.shape[1], 1)
+        Y = np.concatenate( (Y,y_pic,y_avg,y_bin), axis=-1)
+        return(Y)
+
+    def _reconfigure_outputs(self):
+        super(Pic_Generator,self)._reconfigure_outputs()
+        self.true_variables_pred = ['flx', 'pics', 'avg', 'bin']
+
+class Has_Pic_Generator(Pic_Generator):
+    """
+    Generate FLX, its pics,
+    """
+    def __init__(self, folder=data_folder, train=True, batch_size=64, \
+                 custom_b_p_e = 0, preprocess_x=[], chosen_var = ['flxd','flxu'], threshold=50):
+        self.threshold = threshold
+        super(Has_Pic_Generator, self).__init__(folder, train, batch_size, custom_b_p_e=custom_b_p_e, \
+                                    chosen_var=chosen_var, preprocess_x=preprocess_x)
+
+    def apply_preprocess_y(self, Y):
+        Y = super(Has_Pic_Generator, self).apply_preprocess_y(Y)
+        Y = np.max(Y[:,:,-1], axis=1).reshape(Y.shape[0], 1)
+        return(Y)
+
+    def _reconfigure_outputs(self):
+        super(Has_Pic_Generator,self)._reconfigure_outputs()
+        self.true_variables_pred = ['bin']
+
+
+class Max_Pic_Generator(Pic_Generator):
+    """
+    Generate the max value of FLX,
+    """
+    def __init__(self, folder=data_folder, train=True, batch_size=64, \
+                 custom_b_p_e = 0, preprocess_x=[], chosen_var = ['flxd','flxu'], threshold=50):
+        self.threshold = threshold
+        super(Max_Pic_Generator, self).__init__(folder, train, batch_size, custom_b_p_e=custom_b_p_e, \
+                                    chosen_var=chosen_var, preprocess_x=preprocess_x)
+
+    def apply_preprocess_y(self, Y):
+        Y = super(Max_Pic_Generator, self).apply_preprocess_y(Y)
+        Y = np.max(Y[:,:,0], axis=1).reshape(Y.shape[0], 1)
+        return(Y)
+
+    def _reconfigure_outputs(self):
+        super(Max_Pic_Generator,self)._reconfigure_outputs()
+        self.true_variables_pred = ['M']
+
+########### FULLY CONNECTED
 
 class FC_Generator(Up_and_Down_Generator):
     def __init__(self, folder=data_folder, train=True, batch_size=64, shuffle=True, \

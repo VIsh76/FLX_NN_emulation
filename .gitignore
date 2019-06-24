@@ -16,6 +16,8 @@ TrainedModels
 *.npy
 # Python folder and files
 __pycache__
+BestModels
+Logs_old_data
 venv
 .idea
 .ipynb_checkpoints

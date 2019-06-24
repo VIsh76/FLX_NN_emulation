@@ -32,7 +32,7 @@ def Convert_all_from(in_folder='Data', out_folder='Data', div=(5,5), use_selecti
 				f = Dataset(os.path.join(data_folder, f_name))
 				x = f.variables
 				print(f_name)
-				header = list(x.keys())[6:] # 6 first var are dims, X,Y,lat, lon, time,
+				header = list(x.keys())[6:] # 6 first var are [dims, X,Y,lat, lon, time]
 
 				folder_name = f_name.split('.')[-2]
 				out_folder = os.path.join( out_folder0, folder_name)
@@ -68,12 +68,24 @@ def select(data, n0, p0, n1,p1, lev):
     return(v.T)
 
 
-def from_net_to_pd(x, n_beg, p_beg, n_end, p_end,  header, lev):
+def from_net_to_pd(x, n_beg, p_beg, n_end, p_end,  header, lev,	use_fraction=False):
     """
-    Convert parts of
+    Convert a part of an netCDF4 file into a hdf5
+	use_fraction = False, means variables containing 'FR' (such as frland) are dropped to save memory
     """
     VAR = header
+	# USE fraction
     LEV = np.arange(lev)
+	if use_fraction:
+		pass
+	else:
+		# Do not store fraction variables
+		VAR2 = VAR.copy()
+		for var in VAR:
+		    if 'fr' in var:
+		        del(VAR2[VAR2.index(var)])
+		        VAR = VAR2.copy()
+		del(VAR2)
     n0 = n_end - n_beg
     p0 = p_end - p_beg
     X = np.arange(n_beg,n_end); X = X.repeat(p0)

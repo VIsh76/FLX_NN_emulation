@@ -76,6 +76,16 @@ def dfdts_loss_fc(y_true, y_pred, coef=50, lev= CST.lev(CST)):
     E = mean_squared_error(coef*y_pred[:,(2*lev):(3*lev)], coef*y_pred[:, (2*lev):(3*lev)])
     return E
 
+
+### Cross Enthorpy
+def LogLoss(y_true, y_pred):
+    y0 = tf.convert_to_tensor(y[:,:,-1], dtype=tf.int32)
+    y0 = tf.one_hot(y0, depth=2,axis=-1)
+    L = keras.losses.categorical_crossentropy(y0,
+                                              tf.convert_to_tensor(y_pred, dtype=tf.float32))
+    L = K.sum(L, axis=1)
+    return(L)
+
 #### GRAD METHOD
 def Grad_ts(model_ffc, x):
     t0=time.time()
@@ -88,6 +98,15 @@ def Grad_ts(model_ffc, x):
     return(o)
 
 ##########""# ACTIVATION GENERATOR
+
+from keras.utils.generic_utils import get_custom_objects
+
+def swish_activation(x):
+    return K.sigmoid(x)*x
+
+get_custom_objects().update({'swish': Activation(swish_activation)})
+
+
 class Activation_Generator():
     def __init__(self):
         pass
@@ -101,6 +120,8 @@ class Activation_Generator():
             la = Activation('sigmoid')
         elif act== 'softplus':
             la = Activation('softplus')
+        elif act== 'softmax':
+            la = Activation('softplus')
         elif act== 'relu':
             la = Activation('relu')
         elif act== 'sigmoid':
@@ -111,15 +132,20 @@ class Activation_Generator():
             la = Activation('tanh')
         elif act== 'linear':
             la = Activation('linear')
+        elif act== 'softmax':
+            la = Activation('softmax')
         elif act=='leakyrelu':
             la = LeakyReLU(arg)
         elif act=='elu':
             la = ELU(arg)
+        elif(act=='swish'):
+            Activation('swish')
         else:
             print(act, "is not implemented")
             assert(False)
         la.name = name
         return la
+
 
 
 ### CALLBACKS

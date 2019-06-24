@@ -1,0 +1,10 @@
+Unet AE copier :
+
+PB : some pics are skipped 
+Not very continuous
+Big relative mistakes in the upper layers (correction could be added)
+
+TD:
+---
+Retrain with current weight unlock last layer with small LR.
+

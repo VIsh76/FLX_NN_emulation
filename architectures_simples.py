@@ -15,8 +15,6 @@ from contextlib import redirect_stdout
 from CST import CST
 # Simples architecture are saved if the need to reused them is presented
 
-
-
 # Small Models :
 
 
@@ -42,6 +40,19 @@ def Divide_Recombine(o_channel, in_channel,lev=CST.lev(CST), reg=0.001):
     model = keras.Model(Input0, C)
     return(model)
 
+def Divide_Substract(o_channel, in_channel,lev=CST.lev(CST), reg=0.00001):
+    """
+    Generate several Dense layer from the same input and combine them
+    """
+    Input0 = Input(shape=(in_channel,lev), name='Input_RC0')
+    Input1 = Flatten(name='Last_flatten')(Input0)
+    D = [ Dense(lev, kernel_regularizer = keras.regularizers.l2(reg), name=Name('Last_Dense',i))(Input1) for i in range(o_channel)]
+    R = [Reshape(target_shape=(lev,1))(D[i]) for i in range(o_channel)]
+    C = keras.layers.Concatenate(axis=-1, name='Last_Concat')(R)
+    Sub_f = lambda x: x[:,:,0] - x[:,:,1]
+    Sub = keras.layers.Lambda(Sub_f)(C)
+    model = keras.Model(Input0, Sub)
+    return(model)
 
 #### ARCHITECTURES
 

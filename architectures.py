@@ -17,7 +17,7 @@ from architectures_utils import Name, Activation_Generator
 
 
 ##################### BD casual Conv1
-def Bidir_Casual_Conv(list_of_kernel_s, list_of_filters, list_of_activations, params, in_channel, lev=CST.lev(CST)):
+def Bidir_Casual_Conv(list_of_kernel_s, list_of_filters, list_of_activations, params, in_channel, lev=CST.lev(CST), reg=0.0001):
     """
     used as input for the Unet
     """
@@ -34,20 +34,20 @@ def Bidir_Casual_Conv(list_of_kernel_s, list_of_filters, list_of_activations, pa
     # Normal
     for i in range(len(list_of_filters[0])):
         Conv1u.append(Conv1D(filters = list_of_filters[0][i], kernel_size= list_of_kernel_s[0][i], \
-                        padding='causal', name=Name("Conv_u",i+1), use_bias=True, activity_regularizer=regularizers.l2(0.001))(Conv1u[-1]))
+                        padding='causal', name=Name("Conv_u",i+1), use_bias=True, activity_regularizer=regularizers.l2(reg))(Conv1u[-1]))
         Conv1u.append( AG(list_of_activations[0][i], Name(list_of_activations[0][i]+'_u', i+1), params )(Conv1u[-1]) )
 
     # Flipped
     for i in range(len(list_of_filters[1])):
         Conv1d.append(Conv1D(filters = list_of_filters[1][i], kernel_size= list_of_kernel_s[1][i],\
-                        padding='causal', name=Name("Conv_d",i+1), use_bias=True, activity_regularizer=regularizers.l2(0.001))(Conv1d[-1]))
-        Conv1d.append( AG(list_of_activations[1][i], Name(list_of_activations[0][i]+'_d', i+1), params )(Conv1d[-1]) )
+                        padding='causal', name=Name("Conv_d",i+1), use_bias=True, activity_regularizer=regularizers.l2(reg))(Conv1d[-1]))
+        Conv1d.append( AG(list_of_activations[1][i], Name(list_of_activations[1][i]+'_d', i+1), params )(Conv1d[-1]) )
 
     C_flip = Lambda(Flip_layer,name=Name('Flip',1))(Conv1d[-1])
     C1d_prime = [Concatenate( name=Name('Concat',0))([Conv1u[-1], C_flip])]
     for i in range(len(list_of_filters[2])):
         C1d_prime.append(Conv1D(filters = list_of_filters[2][i], kernel_size=list_of_kernel_s[2][i], \
-                            padding='same', name=Name("Conv_c",i), use_bias=True, activity_regularizer=regularizers.l2(0.001))(C1d_prime[-1]))
+                            padding='same', name=Name("Conv_c",i), use_bias=True, activity_regularizer=regularizers.l2(reg))(C1d_prime[-1]))
         C1d_prime.append( AG(list_of_activations[2][i], Name(list_of_activations[2][i]+'_c', 1+i), params )(C1d_prime[-1]) )
     return keras.Model(Input0, C1d_prime[-1])
 
@@ -166,6 +166,43 @@ def Unet_Act_Double(list_of_kernels_s, list_of_filters, list_of_activations, par
 
         Conv_l4.append( AG(list_of_activations[4][i], Name(list_of_activations[4][i], 300+i), params )(Conv_l4[-1]) )
     return keras.Model(Conv_l0[0], Conv_l4[-1])
+
+
+def Contraction(list_of_kernels_s, list_of_filters, list_of_activations, params=[], Div=3, lev=CST.lev(CST), in_channel=11, reg=0.001):
+    """
+    Generate a Contracter Net (first half of the Unet)
+    """
+    AG = Activation_Generator()
+    Sizes = [ len(list_of_filters[i]) for i in range(len(list_of_filters)) ]
+
+#First Convolutions
+    Conv_l0 = [Input(name='Origin_Input', dtype='float32', shape=(lev, in_channel))]
+    for i in range(Sizes[0]):
+        Conv_l0.append(Conv1D(filters=list_of_filters[0][i], kernel_size=list_of_kernels_s[0][i],
+                            padding='same', use_bias=False, name=Name('Conv', i),
+                            kernel_regularizer=regularizers.l1(reg))(Conv_l0[-1]))
+        Conv_l0.append( AG(list_of_activations[0][i], Name(list_of_activations[0][i], i), params)(Conv_l0[-1]))
+# DownScaling
+    Conv_l1 = [Conv_l0[-1]]
+    for i in range(Sizes[1]//2):
+        Conv_l1.append(AveragePooling1D(2, padding='same', stride=2, name=Name('AVG', i+100))(Conv_l1[-1]))
+        Conv_l1.append(Conv1D(filters=list_of_filters[1][2*i], kernel_size=list_of_kernels_s[1][2*i],
+                               padding='same', name=Name('Conv', i+100))(Conv_l1[-1] ))
+        Conv_l1.append(AG(list_of_activations[1][2*i], Name(list_of_activations[1][2*i], 100+i), params )(Conv_l1[-1]) )
+
+        Conv_l1.append(Conv1D(filters=list_of_filters[1][2*i+1], kernel_size=list_of_kernels_s[1][2*i+1],
+                               padding='same', name=Name('Conv', 110+i))(Conv_l1[-1]) )
+        Conv_l1.append(AG(list_of_activations[1][2*i+1], Name(list_of_activations[1][2*i+1], 110+i), params )(Conv_l1[-1]))
+
+# Operation done on the small dimension : here fc
+    Conv_l2 = [Flatten(name='Flatten')(Conv_l1[-1])]
+    for i in range(Sizes[2]):
+        Conv_l2.append( Dense( int(lev/2**Div) * list_of_filters[2][i], name=Name('Dense', i), activity_regularizer=regularizers.l2(reg))(Conv_l2[-1]))
+        Conv_l2.append(AG(list_of_activations[2][i], list_of_activations[2][i]+'_d_'+str(i), params)(Conv_l2[-1]))
+
+#    Conv_l2.append(Reshape(name='Reshape', input_shape=Conv_l2[-1].shape,
+#                            target_shape=(int(lev/2**Div),  list_of_filters[2][-1]))(Conv_l2[-1]))
+    return keras.Model(Conv_l0[0], Conv_l2[-1])
 
 
 
