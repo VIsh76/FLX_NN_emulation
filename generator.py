@@ -21,8 +21,8 @@ class Basic_Generator(keras.utils.Sequence):
         self._set_dirs(folder)
         self._initialise_parameters()
         # idx
-        self.idx_folder = np.arange(self._nb_dir)
-        self.idx_file = np.arange(self._div)
+        self.idx_folder = np.repeat(np.arange(self._nb_dir), self._div)
+        self.idx_file = np.tile(np.arange(self._div), self._nb_dir)
         self.idx_el = np.arange(self.X_x_Y)
         self.current_b = 0
         self.current_folder = 0
@@ -106,8 +106,13 @@ class Basic_Generator(keras.utils.Sequence):
         if self.shuffle>0:
             np.random.shuffle(self.idx_el)
         if self.shuffle>1:
-            np.random.shuffle(self.idx_folder)
-            np.random.shuffle(self.idx_file)
+
+            all_files_idx = np.arange(self._div*self._nb_dir)
+            np.random.shuffle(all_files_idx)
+
+            self.idx_folder = all_files_idx//self._div
+            self.idx_file = all_files_idx % self._div
+
         self.current_folder = self.idx_folder[0]
         self.current_file = self.idx_file[0]
         if(self._initialisation):
@@ -130,14 +135,26 @@ class Basic_Generator(keras.utils.Sequence):
     def batch_per_file(self):
         return(self.X_x_Y // self.batch_size)
 
+#    def index_to_ids(self,index):
+#        index0 = index
+#        batch_per_file = self.batch_per_file
+#        el_id = index0 % batch_per_file
+#        index0 = index0 // batch_per_file
+#        file_id = index0 % self._div
+#        folder_id   = index0 // self._div
+#        return folder_id, file_id, el_id
+
     def index_to_ids(self,index):
+        """
+        Given one number return the corresponding
+        """
         index0 = index
         batch_per_file = self.batch_per_file
         el_id = index0 % batch_per_file
-        index0 = index0 // batch_per_file
-        file_id = index0 % self._div
-        folder_id   = index0 // self._div
+        file_id =  index0 // batch_per_file
+        folder_id =  index0 // batch_per_file
         return folder_id, file_id, el_id
+
 
     def ids_to_index(self, ids):
         index = (ids[0]*self._div + ids[1])*self.batch_per_file +ids[2]
