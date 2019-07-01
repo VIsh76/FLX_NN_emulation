@@ -74,18 +74,18 @@ def from_net_to_pd(x, n_beg, p_beg, n_end, p_end,  header, lev,	use_fraction=Fal
 	use_fraction = False, means variables containing 'FR' (such as frland) are dropped to save memory
     """
     VAR = header
-	# USE fraction
+    # USE fraction
     LEV = np.arange(lev)
-	if use_fraction:
-		pass
-	else:
+    if use_fraction:
+        pass
+    else:
 		# Do not store fraction variables
-		VAR2 = VAR.copy()
-		for var in VAR:
-		    if 'fr' in var:
-		        del(VAR2[VAR2.index(var)])
-		        VAR = VAR2.copy()
-		del(VAR2)
+        VAR2 = VAR.copy()
+        for var in VAR:
+            if 'fr' in var:
+                del(VAR2[VAR2.index(var)])
+                VAR = VAR2.copy()
+        del(VAR2)
     n0 = n_end - n_beg
     p0 = p_end - p_beg
     X = np.arange(n_beg,n_end); X = X.repeat(p0)

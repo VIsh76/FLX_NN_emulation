@@ -4,7 +4,27 @@ PB : some pics are skipped
 Not very continuous
 Big relative mistakes in the upper layers (correction could be added)
 
-TD:
----
-Retrain with current weight unlock last layer with small LR.
+
+Gradient Analysis:
+Fortran | NN 
+
+fcld : null |   -> take out from trainings
+o3 : some levels have high impacts
+pl : high levels affect eveyrthing (rest 0)
+q : vertical pos
+
+model has tini ice cloud
+qi : null
+ql : null
+ri : null 
+rl : null
+
+t green diag [neg impact on all lower]
+
+NN
+____
+
+fcld : small green impact (like qi, like ri)
+
+
 

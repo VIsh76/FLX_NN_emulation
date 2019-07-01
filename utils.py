@@ -159,7 +159,7 @@ def Jacobian(M,x, dt):
     # could be more optimize [l steps instead of l*n_var]
     # Using one pred of size lev*n_var produce odd result, lev*header_x pred
     # which is not optimal
-    
+
     for v in range(n_var):
         for l in range(lev):
             x0 = x.copy()
@@ -170,7 +170,37 @@ def Jacobian(M,x, dt):
 
 
 ########## GET DICTIONNARY :
-
+def read_Level_Norm(file):
+    """
+    Read a file with same '\n' parsing as 'dict0.txt' and load it into dictionnary
+    Work as Load_FLX_dict for Level_Normalize preprocess class
+    """
+    d=dict()
+    Flag=1
+    with open(file) as f:
+        all_of_it = f.read()
+        G = all_of_it.split('\n')
+        for line in G:
+            if(len(line)==0):
+                d[var]=values
+                Flag=1
+            elif(Flag==1):
+                var = line
+                values=[]
+                Flag=2
+            elif Flag==2:
+                values=values+line.split(' ')
+    for k in d.keys():
+        delidx = []
+        j=0
+        while j< len(d[k]):
+            if d[k][j]=='':
+                del(d[k][j])
+            else:
+                d[k][j]=float(d[k][j])
+                j+=1
+        d[k]=np.array(d[k])
+    return(d)
 
 
 fct = []

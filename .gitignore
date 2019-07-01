@@ -17,6 +17,7 @@ TrainedModels
 # Python folder and files
 __pycache__
 BestModels
+TrainedModels_old_data
 Logs_old_data
 venv
 .idea

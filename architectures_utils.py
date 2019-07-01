@@ -26,7 +26,6 @@ def one_loss(y_true, y_pred, i):
     E = mean_squared_error(y_true[:, :, i], y_pred[:, :, i])
     return E
 
-
 # Normal Losses
 def flxd_loss(y_true, y_pred):
     E = mean_squared_error(y_true[:, :, 0], y_pred[:, :, 0])
@@ -139,7 +138,7 @@ class Activation_Generator():
         elif act=='elu':
             la = ELU(arg)
         elif(act=='swish'):
-            Activation('swish')
+            la=Activation('swish')
         else:
             print(act, "is not implemented")
             assert(False)

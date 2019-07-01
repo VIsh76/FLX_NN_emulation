@@ -24,6 +24,12 @@ class Preprocess(object):
         self.fitted = True
         return x
 
+    def sub_vec(self,lev):
+        return(np.zeros(lev))
+
+    def prod_vec(self,lev):
+        return(np.ones(lev))
+
     def __str__(self):
         return 'type : {} \nfitted : {} \nvalues : {} \n  '
 
@@ -89,6 +95,13 @@ class Normalizer(Preprocess):
         self.m = x
         self.std = y
 
+    def sub_vec(self, lev):
+        return(np.zeros(lev)+self.m)
+
+    def prod_vec(self, lev):
+        return(np.ones(lev)/self.std)
+
+
     def __str__(self):
         return super().__str__().format("Normalizer", self.fitted, (self.m, self.std))
 
@@ -116,6 +129,12 @@ class Zero_One(Preprocess):
         self.fitted = True
         self.min = x
         self.max = y
+
+    def sub_vec(self, lev):
+        return(np.zeros(lev)+self.min)
+
+    def prod_vec(self, lev):
+        return(np.ones(lev)/((self.max-self.min)))
 
     @property
     def params(self):
@@ -189,6 +208,12 @@ class Level_Normalizer(Preprocess):
     @property
     def renorm(self):
         return self.use_renorm
+
+    def sub_vec(self, lev):
+        return np.zeros(lev) + self.L
+
+    def prod_vec(self, lev):
+        return np.ones(lev) / self.norm
 
     @property
     def params(self):
