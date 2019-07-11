@@ -40,7 +40,8 @@ def Plot_Batch(x, header, swap=True):
         ax= f.add_subplot(ligne, 4, i+1)
         ax.set_title(header[i])
         for b in range(x0.shape[0]):
-            ax.plot(np.flip(x0[b,i,:]), np.arange(len(x0[b,i,:])))
+            ax.plot(np.flip(x0[b,i,:]), np.arange(len(x0[b,i,:]), 0, -1))
+        ax.invert_yaxis()
 
 def Plot_Histograms(F, w, header):
     f= plt.figure(figsize=(15,10))
@@ -53,19 +54,12 @@ def Plot_one_profile(y):
     plt.plot(np.flip(y), np.arrange(len(y[0])) )
     plt.show()
 
-def Plot_diff(F, y,y0, header_y, lev=72, J = [0], titles=False):
-    for ind,i in enumerate(J):
-        F[ind].plot(np.flip(y[i,:,0].T) , np.arange(lev))
-        F[ind].plot(np.flip(y0[i,:,0].T) , np.arange(lev))
-        F[ind].legend(["truth", "pred"])
-        if titles !=False:
-            F[ind].set_title(titles[ind])
 
 def Plot_diff(F, y,y0, header_y, lev=72, J = [0], titles=False):
     for l in range(len(header_y)):
         for ind,i in enumerate(J):
-            F[ind*len(header_y) + l].plot(np.flip(y[i,:,l].T) , np.arange(lev))
-            F[ind*len(header_y) + l].plot(np.flip(y0[i,:,l].T) , np.arange(lev))
+            F[ind*len(header_y) + l].plot(np.flip(y[i,:,0].T) , np.arange(len(y[0,:,0])))
+            F[ind*len(header_y) + l].plot(np.flip(y0[i,:,0].T) , np.arange(len(y0[0,:,0])))
             F[ind*len(header_y) + l].legend(["truth", "pred"])
             if titles !=False:
                 F[ind*len(header_y) + l].set_title(header_y[l] + ' '+ str(titles[ind]))

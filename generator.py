@@ -239,6 +239,24 @@ class Preprocessed_Generator(Basic_Generator):
         X=X.swapaxes(1,2)
         return X,Y
 ######## Differenciate Y and take only differences in flx as the output
+class FLX_Cumulative_Generator(Preprocessed_Generator):
+    """
+    Generate the cumulative FLX
+    """
+    def __init__(self, folder=data_folder, train=True, batch_size=64, shuffle=True, \
+                 custom_b_p_e = 0, preprocess_x=[]):
+        super(FLX_Cumulative_Generator, self).__init__(folder, train, batch_size, shuffle, custom_b_p_e, \
+                                                    preprocess_x=preprocess_x)
+
+    def apply_preprocess_y(self,Y):
+        Y= super(FLX_Cumulative_Generator, self).apply_preprocess_y(Y)
+        idflx = np.array( [ self.variables_pred.index(name) for name in ['flxu', 'flxd']])
+        Y = Y[:, idflx]
+        Y = (-Y[:,0, 1:] + Y[:,1, 1:]) # store FLX, onyl the 72 lowest, the more important
+        if(Y.shape[-1]==1):
+            Y = Y.reshape(Y.shape[0],Y.shape[1])
+        return Y
+
 
 class Full_Diff_Generator(Preprocessed_Generator):
     def __init__(self, folder=data_folder, train=True, batch_size=64, shuffle=True, \
@@ -310,6 +328,9 @@ class FLX_Generator(Full_Diff_Generator):
         if(Y.shape[-1]==1):
             Y = Y.reshape(Y.shape[0],Y.shape[1])
         return Y
+
+
+
 
 
 class FLX_Generator(Full_Diff_Generator):

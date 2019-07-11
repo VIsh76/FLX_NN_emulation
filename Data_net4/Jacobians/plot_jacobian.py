@@ -5,7 +5,7 @@ from netCDF4 import Dataset
 
 # Use input
 # ---------
-profile = 'i0001_j0001'
+profile = 'i0720_j0720'
 path = ''
 
 fields3d = ['dflxdpl','dflxdt','dflxdq','dflxdqi','dflxdql','dflxdri','dflxdrl',

@@ -27,4 +27,6 @@ ____
 fcld : small green impact (like qi, like ri)
 
 
+G :probability o
+
 

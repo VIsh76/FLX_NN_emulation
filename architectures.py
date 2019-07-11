@@ -64,6 +64,60 @@ def Bidir_Casual_Conv(list_of_kernel_s, list_of_filters, list_of_activations, pa
         C1d_prime.append( AG(list_of_activations[2][i], Name(list_of_activations[2][i]+'_c', 1+i), params )(C1d_prime[-1]) )
     return keras.Model(Input0, C1d_prime[-1])
 
+######################
+def Bidir_Casual_Conv_L1(list_of_kernel_s, list_of_filters, list_of_activations, params, in_channel, lev=CST.lev(CST), reg=0.0001):
+    """
+    all list argument must be of length 3, each sublist of the same size as list_of_kernels' sublists
+    list_xx[0] : parameters for the up convolutions
+    list_xx[1] : parameters for the down Convolutions
+    list_xx[2] : parameters for the concatenation of the up and down convs
+    kernels : kernel size
+    filters : number of filters
+    activations : activation function names for Activation_Generator()
+    params : parameters for activation function
+    (in_channel, lev) : shape of input
+    reg : regularizers weights for every layer (before activation)
+    """
+
+    Input0 = Input(shape=(lev, in_channel), name=Name('Input',0), dtype='float32')
+
+    Flip_layer = lambda x: K.reverse(x, axes=0)
+#    I_cp = UpSampling1D(ups, name=Name('Up',0))(Input0)
+#    I_avg = AveragePooling1D(pooling, padding='same', stride=ups, name='AVG_p')(I_cp)
+    I_flip = Lambda(Flip_layer, name=Name('Flip',0))(Input0)
+
+    Conv1u = [Input0]
+    Conv1d = [I_flip]
+    AG = Activation_Generator()
+
+    # Normal causal
+    for i in range(len(list_of_filters[0])):
+        Conv1u.append(Conv1D(filters = list_of_filters[0][i], kernel_size= list_of_kernel_s[0][i], \
+                        padding='causal', name=Name("Conv_u",i+1), use_bias=True, activity_regularizer=regularizers.l1(reg))(Conv1u[-1]))
+        Conv1u.append( AG(list_of_activations[0][i], Name(list_of_activations[0][i]+'_u', i+1), params )(Conv1u[-1]) )
+
+    # Flipped causal
+    for i in range(len(list_of_filters[1])):
+        Conv1d.append(Conv1D(filters = list_of_filters[1][i], kernel_size= list_of_kernel_s[1][i],\
+                        padding='causal', name=Name("Conv_d",i+1), use_bias=True, activity_regularizer=regularizers.l1(reg))(Conv1d[-1]))
+        Conv1d.append( AG(list_of_activations[1][i], Name(list_of_activations[1][i]+'_d', i+1), params )(Conv1d[-1]) )
+
+    C_flip = Lambda(Flip_layer,name=Name('Flip',1))(Conv1d[-1])
+    C1d_prime = [Concatenate( name=Name('Concat',0))([Conv1u[-1], C_flip])]
+
+    # Conv of both
+    for i in range(len(list_of_filters[2])):
+        if(i!=len(list_of_filters[2])):
+            C1d_prime.append(Conv1D(filters = list_of_filters[2][i], kernel_size=list_of_kernel_s[2][i], \
+                                padding='same', name=Name("Conv_c",i), use_bias=True, activity_regularizer=regularizers.l1(reg))(C1d_prime[-1]))
+            C1d_prime.append( AG(list_of_activations[2][i], Name(list_of_activations[2][i]+'_c', 1+i), params )(C1d_prime[-1]) )
+        else:
+            C1d_prime.append(Conv1D(filters = list_of_filters[2][i], kernel_size=list_of_kernel_s[2][i], \
+                                padding='same', name=Name("Conv_c",i), use_bias=True)(C1d_prime[-1]))
+            C1d_prime.append( AG(list_of_activations[2][i], Name(list_of_activations[2][i]+'_c', 1+i), params )(C1d_prime[-1]) )
+    return keras.Model(Input0, C1d_prime[-1])
+
+
 ##################### Unet Simple
 
 def Unet_Act_Simple(list_of_kernels_s, list_of_filters, list_of_activations, params=[], Div=3, lev=CST.lev(CST), in_channel=11, reg=0.001 ):
