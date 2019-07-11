@@ -83,6 +83,23 @@ def Plot_triple_diff_separated(F,y,y0, header_y, sep=0,  lev=72, j = 0):
             F[i+2*nv].legend(["truth", "pred"])
             F[i+2*nv].set_title(header_y[i]+' high layers')
 
+def Plot_FLXs(F, y, y0=[], header_y=['flx'], J = [0], titles=False):
+    for ind,i in enumerate(J):
+        F[0].plot(np.flip(y[i,:,0].T) , np.arange(len(y[0,:,0])))
+        F[0].plot(np.flip(y[i,:,0].T) , np.arange(len(y[0,:,0])))
+        F[0].legend(["truth", "pred"])
+        if titles !=False:
+            F[0].set_title(titles[0])
+    if len(y0)!=0:
+        for l in range(len(header_y)):
+            for ind,i in enumerate(J):
+                F[1].plot(np.flip(y0[i,:,0].T) , np.arange(len(y0[0,:,0])))
+                F[1].plot(np.flip(y0[i,:,0].T) , np.arange(len(y0[0,:,0])))
+                F[1].legend(["truth", "pred"])
+                if titles !=False:
+                    F[1].set_title(titles[1])
+
+
 def reconstruct(T, div=5):
     _,y,x =T.shape
     T0 = np.zeros((div*x,div*y))
@@ -117,31 +134,15 @@ def Get_Var(generator, header, var, op, y_v=False):
 
 
 # GRADIENT OPERATIONS:
-def Sep_Var_show(F,J, header_x, T=True):
+def CumSum(dflx):
     """
-    Show the Jacobian of each variable
-    F : F and Plot class element of len len(header_x)
-    header_x : list of variables
-    J gradient of size (lev, n_var*lev)
+    return flx given the output of the NN
     """
-    l , c = J.shape
-    n_var = len(header_x)
-    lev = c//n_var
-    for i in range(len(header_x)):
-        F[i].imshow(J[:, lev*i:lev*(i+1) ])
-        F[i].set_title(header_x[i])
+    flx = np.cumsum(np.flip(dflx), axis=1)
+    flx = np.flip(flx)
+    return(flx)
 
-def Sep_Var_Gradient(J, header_x):
-    """
-    Rshape J of size(lev, header_x*lev) to size (header_x, lev, lev)
-    """
-    l,c = J.shape
-    n_var = len(header_x)
-    lev = c//n_var
-    J = [J[:, lev*i:lev*(i+1) ] for i in range(len(header_x))]
-    return(np.array(J))
-
-def Jacobian(M,x, dt):
+def Jacobian_NonCM(Mlist,x, dt):
     """
     Compute the Jacobian of x
     x has shape (1, lev, n_var)
@@ -149,18 +150,187 @@ def Jacobian(M,x, dt):
     """
     _, lev, n_var= x.shape
     Jac = np.zeros((n_var, lev, lev))
-    P0 = np.zeros((lev*n_var, lev))
+    P0 = -medium_pred(Mlist, x)
+    P1 = P0.copy()*0
     # could be more optimize [l steps instead of l*n_var]
     # Using one pred of size lev*n_var produce odd result, lev*header_x pred
     # which is not optimal
-
     for v in range(n_var):
         for l in range(lev):
             x0 = x.copy()
-            x0[0,l , v] += 1/dt
-            P0[v*lev+l] = M.predict(x0)
-    P1 = M.predict(x)
-    return (P1-P0).T
+            pert = x[0,l,v]/dt
+            x0[0, l, v] += pert
+            P1 = -medium_pred(Mlist, x0)
+            if abs(pert)>0:
+                Jac[v, :, l] = (P1-P0)/pert
+    return Jac
+
+def Jacobian_Fortran(Mlist,x, dt):
+    """
+    Compute the Jacobian of x
+    x has shape (1, lev, n_var)
+    M product an output of size (1, lev)
+    """
+    _, lev, n_var= x.shape
+    Jac = np.zeros((n_var, lev, lev))
+    P0 = CumSum( -medium_pred(Mlist, x) )
+    P1 = P0.copy()*0
+    # could be more optimize [l steps instead of l*n_var]
+    # Using one pred of size lev*n_var produce odd result, lev*header_x pred
+    # which is not optimal
+    for v in range(n_var):
+        for l in range(lev):
+            x0 = x.copy()
+            pert = x[0,l,v]/dt
+            x0[0, l, v] += pert
+            P1 = CumSum(-medium_pred(Mlist, x0))
+            if abs(pert)>0:
+                Jac[v, :, l] = (P1-P0)/pert
+    return Jac
+
+def Check_Modif_Fortran(Mlist,x, dt):
+    """
+    Compute new outputs, for perturbations
+    x has shape (1, lev, n_var)
+    M product an output of size (1, lev)
+    """
+    _, lev, n_var= x.shape
+    Jac = np.zeros((n_var, lev, lev))
+    P0 = CumSum( medium_pred(Mlist, x) )
+    P1 = P0.copy()*0
+    # could be more optimize [l steps instead of l*n_var]
+    # Using one pred of size lev*n_var produce odd result, lev*header_x pred
+    # which is not optimal
+    for v in range(n_var):
+        for l in range(lev):
+            x0 = x.copy()
+            pert = x[0,l,v]/dt
+            x0[0, l, v] += pert
+            P1 = CumSum(medium_pred(Mlist, x0))
+            Jac[v, :, l] = P1
+    return Jac
+
+def Jacobian_Single_Var_emis(Mlist,x, v_id, dt):
+    """
+    Compute the jacobian for 1 value vars such as emis
+    v_id, id of the variable in the header_x (header.index(variable))
+    """
+    _, lev, n_var= x.shape
+    J = np.zeros((lev))
+    x0 = x.copy()
+    x0[0,:,v_id]+=x0[0,0,0]/dt
+    P1 = -CumSum(medium_pred(Mlist ,x))
+    P2 = -CumSum(medium_pred(Mlist, x0))
+    return (P1-P2)*dt
+
+def Check_Modif_Fortran(Mlist,x, dt):
+    """
+    Compute new outputs, for perturbations
+    x has shape (1, lev, n_var)
+    M product an output of size (1, lev)
+    """
+    _, lev, n_var= x.shape
+    Jac = np.zeros((n_var, lev, lev))
+    P0 = CumSum( medium_pred(Mlist, x) )
+    P1 = P0.copy()*0
+    # could be more optimize [l steps instead of l*n_var]
+    # Using one pred of size lev*n_var produce odd result, lev*header_x pred
+    # which is not optimal
+    for v in range(n_var):
+        for l in range(lev):
+            x0 = x.copy()
+            pert = x[0,l,v]/dt
+            x0[0, l, v] += pert
+            P1 = CumSum(medium_pred(Mlist, x0))
+            Jac[v, :, l] = P1
+    return Jac
+# Read NC4 files:
+
+def Produce_netCDF4_jacobian(fh, header_x):
+    z = np.arange(1, 73, 1)
+    flag=True
+    J2 = np.expand_dims(np.array(fh['dflxdpl']).T, axis=0)
+    # first var is emis and a 2d var not shown anyway, so we use
+    for v0 in header_x:
+        v = 'dflxd'+v0
+        if 'flx' in v and not 'emis' in v and not 'ts' in v:
+            if flag:
+                J2 = np.concatenate([J2 , np.expand_dims(np.array(fh[v]).T, axis=0)], axis=0)
+            else:
+                J2 = np.array(np.expand_dims(fh[v], axis=0))
+                flag=True
+    return(J2)
+def Sep_Var_show_Log(F,J, header_x, T=True):
+    """
+    Show the Jacobian of each variable
+    F : F and Plot class element of len len(header_x)
+    header_x : list of variables
+    J gradient of size (lev, n_var*lev)
+    """
+    c, l, _ = J.shape
+    n_var = len(header_x)
+    lev = l
+    z = np.arange(1,73,1)
+    for j in range(len(header_x)):
+        if j>0:
+            IMG = J[j]
+            IMG = np.sign(J[j])*np.log(abs(J[j])+1)
+            maxf = np.max(np.abs(IMG))
+            if maxf == 0:
+                maxf = 1.0
+            incf = 2*maxf/51.
+            clevs = np.arange(-maxf,maxf+incf,incf)
+            im = F[j-1].contourf(z,z, IMG, clevs, cmap='PRGn')
+            F[j-1].set_title(header_x[j])
+            F[j-1].set_aspect('equal','box')
+            F[j-1].invert_yaxis()
+            F.f.colorbar(im, ax=F[j-1])
+
+def Sep_Var_show(F,J, header_x, T=True):
+    """
+    Show the Jacobian of each variable
+    F : F and Plot class element of len len(header_x)
+    header_x : list of variables
+    J gradient of size (lev, n_var*lev)
+    """
+    c, l, _ = J.shape
+    n_var = len(header_x)
+    lev = l
+    z = np.arange(1,73,1)
+    for j in range(len(header_x)):
+        if j>0:
+            IMG = J[j]
+#            IMG = np.sign(J[j])*np.log(abs(J[j])+1)
+            maxf = np.max(np.abs(IMG))
+            if maxf == 0:
+                maxf = 1.0
+            incf = 2*maxf/51.
+            clevs = np.arange(-maxf,maxf+incf,incf)
+            im = F[j-1].contourf(z,z, IMG, clevs, cmap='PRGn')
+            F[j-1].set_title(header_x[j])
+            F[j-1].set_aspect('equal','box')
+            F[j-1].invert_yaxis()
+            F[j-1].invert_xaxis()
+            F.f.colorbar(im, ax=F[j-1])
+
+
+def Produce_x_nc4(fh, i0,j0, header_x):
+    z = np.arange(1, 73, 1)
+    flag=True
+    x_0 = np.zeros((72, len(header_x)))
+    for i,v in enumerate(header_x):
+        if v=='emis':
+            x_0[:,i] = fh.variables[v][0, j0-1, i0-1]
+        if not 'emis' in v and not 'ts' in v:
+            x_0[:,i] = fh.variables[v][0,:, j0-1, i0-1]
+    return(x_0)
+
+def file_name_to_id(fname):
+#    fn, ex = fname.split('.')
+    _, istr, jstr = fname.split('_')
+    i = int(istr[1:])
+    j = int(jstr[1:])
+    return(i,j)
 
 
 ########## GET DICTIONNARY :
