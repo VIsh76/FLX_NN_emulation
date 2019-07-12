@@ -54,6 +54,71 @@ def Divide_Substract(o_channel, in_channel,lev=CST.lev(CST), reg=0.00001):
     model = keras.Model(Input0, Sub)
     return(model)
 
+# Dict Makers Models
+def MakeDictMatrix(D, header, lev=72):
+    """
+    from a preproc dictionnary return two matrix, one for substraction one for multiplication
+    Doing (X-M1)*M2 is equivalent to applying the preproc normalisation
+    """
+    Ms = np.zeros((1, lev, len(header)))
+    Mp = np.ones((1, lev, len(header)))
+    for var in D.dict.keys():
+        i = header.index(var)
+        Ms[0, :, i] = D[var].sub_vec(lev)
+        Mp[0, :, i] = D[var].prod_vec(lev)
+    return(Ms,Mp)
+
+def MakeDictNet(Ms,Mp):
+    Ts1 = tf.cast(Ms, dtype=tf.float32)
+    Tp1 = tf.cast(Mp, dtype=tf.float32)
+    D1s = lambda x : keras.layers.Subtract()([x, Ts1])
+    D1m = lambda x : keras.layers.Multiply()([x, Tp1])
+    lbd_D1s = keras.layers.Lambda(D1s)
+    lbd_D1m = keras.layers.Lambda(D1m)
+    M = keras.Sequential()
+    M.add(lbd_D1s)
+    M.add(lbd_D1m)
+    return(M)
+
+
+# 2D convertion
+class Perturbate(Layer):
+    """
+    Add with the size of the input (instead of the output channel size)
+    """
+    def __init__(self, **kwargs):
+#        self.output_dim = output_dim
+        self.SumL = keras.layers.Add()
+        super(Perturbate, self).__init__(**kwargs)
+
+    def build(self, input_shape):
+        # Create a trainable weight variable for this layer.
+        self.kernel = self.add_weight(name='kernel',
+                                      shape=(input_shape[1], input_shape[2], input_shape[3]),
+                                      initializer='uniform',
+                                      trainable=True)
+        super(Perturbate, self).build(input_shape)
+
+    def call(self, x):
+        print((x+self.kernel).shape)
+        return x+self.kernel
+
+    def compute_output_shape(self, input_shape):
+         return (input_shape[1],input_shape[2], input_shape[3])
+
+def Expander(lev):
+    """
+    Expand an input of size (lev, n_v) to (lev, lev, n_v)
+    """
+    expand = lambda x : K.expand_dims(x, axis=-1)
+    repeat = lambda x : K.repeat_elements(x, lev, axis=-1)
+    Expand = Lambda(expand)
+    Repeat = Lambda(repeat)
+    M = Sequential()
+    M.add(Expand)
+    M.add(Repeat)
+    return(M)
+
 #### ARCHITECTURES
 
 def Old_Bidir(in_channel=11, out_channel=3):
