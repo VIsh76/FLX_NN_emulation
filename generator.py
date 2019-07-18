@@ -28,6 +28,7 @@ class Basic_Generator(keras.utils.Sequence):
         self.current_folder = 0
         self.current_file = 0
         # randomize
+        self.reset()
         self.on_epoch_end()
         self._set_init_false()
 
@@ -100,21 +101,34 @@ class Basic_Generator(keras.utils.Sequence):
     def _set_init_true(self):
         self._initialisation=True
 
+    def reset(self):
+        """
+        Reset the index to zero (call after epoch_end if the current file and folder are the last ones)
+        """
+        self.all_files_idx = np.arange(self._div*self._nb_dir)
+        print('Restart - to file 0')
+        if self.shuffle>1:
+            np.random.shuffle(all_files_idx)
+
+        self.idx_folder = self.all_files_idx//self._div
+        self.idx_file = self.all_files_idx % self._div
+        self.current_folder = self.idx_folder[0]
+        self.current_file = self.idx_file[0]
+
+
     def on_epoch_end(self, _initialisation=False):
         'Updates indexes after each epoch'
         self.current_b = 0
+
         if self.shuffle>0:
             np.random.shuffle(self.idx_el)
-        if self.shuffle>1:
+#        if self.current_folder==self.idx_folder[-1] and self.current_file==self.idx_file[-1]:
 
-            all_files_idx = np.arange(self._div*self._nb_dir)
-            np.random.shuffle(all_files_idx)
+        cidx =self.all_files_idx. tolist().index( self.current_file + self.current_folder*self._div)
+        self.idx_folder = np.roll(self.idx_folder, -cidx-1)
+        self.idx_file = np.roll(self.idx_file, -cidx-1)
+        self.all_files_idx = np.roll(self.all_files_idx, -cidx-1)
 
-            self.idx_folder = all_files_idx//self._div
-            self.idx_file = all_files_idx % self._div
-
-        self.current_folder = self.idx_folder[0]
-        self.current_file = self.idx_file[0]
         if(self._initialisation):
             self.X, self.Y = self._load_a_couple0(self.load_a_path(self.current_folder, self.current_file))
         else:

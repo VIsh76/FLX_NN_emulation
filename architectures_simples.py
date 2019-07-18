@@ -6,7 +6,7 @@ from keras.layers import Bidirectional, Lambda, Reshape
 from keras.losses import mean_squared_error
 from keras import backend as K
 from keras import regularizers
-
+from keras.layers import Layer
 from architectures_utils import Name
 
 import os
@@ -16,8 +16,6 @@ from CST import CST
 # Simples architecture are saved if the need to reused them is presented
 
 # Small Models :
-
-
 def Upsampler(avg, pooling, input_shape):
     """
     Generate a Upsampler model
@@ -80,7 +78,43 @@ def MakeDictNet(Ms,Mp):
     M.add(lbd_D1m)
     return(M)
 
+class ConvDP2(Layer):
+    """
+    Stacked Layers of
+    Convolution, Activation function,
+    nb_filters, ks as kernel_size
+    """
+    def __init__(self, nb_filter, ks, act, dpr, bias, reg, ide, **kwargs):
+        self.nb_filter = nb_filter
+        self.ks = ks
+        if(type(ks)==int):
+            self.ks= (ks,ks)
+        self.act = act
+        self.dpr = dpr
+        self.reg = reg
+        self.ide = ide
+        self.bias = bias
+#        print('ks', ks, 'act',act,'dpr', dpr, 'reg',reg, 'ide',ide, 'bias',bias)
+        super(ConvDP2, self).__init__(**kwargs)
+        self.name = Name('ConvDP2', self.ide)
 
+    def build(self, input_shape):
+        AG = Activation_Generator()
+        self.c2d = Conv2D(input_shape=input_shape, nb_filter=self.nb_filter,  padding='same', use_bias=self.bias,
+                          kernel_size=self.ks, activity_regularizer=regularizers.l2(self.reg))
+        self.activ =  AG(self.act, Name(self.act, self.ide), 0.01)
+        self.d = Dropout(self.dpr)
+        super(ConvDP2, self).build(input_shape)
+
+    @property
+    def trainable_weights(self):
+        return self.c2d.trainable_weights
+
+    def call(self,x):
+        return self.d(self.activ(self.c2d(x)))
+
+    def compute_output_shape(self, input_shape):
+        return (input_shape[0], input_shape[1], input_shape[2], self.nb_filter)
 # 2D convertion
 class Perturbate(Layer):
     """

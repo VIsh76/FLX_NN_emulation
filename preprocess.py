@@ -105,7 +105,6 @@ class Normalizer(Preprocess):
     def __str__(self):
         return super().__str__().format("Normalizer", self.fitted, (self.m, self.std))
 
-
 class Zero_One(Preprocess):
     """
     Match the input to a variable in [0,1]

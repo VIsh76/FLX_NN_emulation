@@ -14,6 +14,10 @@ TrainedModels
 *.pickle
 # npy
 *.npy
+
+#misc
+*.wav
+
 # Python folder and files
 __pycache__
 BestModels

@@ -29,4 +29,14 @@ fcld : small green impact (like qi, like ri)
 
 G :probability o
 
+# JAC VALUES #
+- fcld : 0
+- o3 (pos > 9174113, 1.5e7) 1e7 
+- pl : 0.3, 0.4
+- q : 367425 ~ 3.6 10e5
+- qi : 284779 ~ 2.8 10e5 (147???)
+- ql : 0 ~ 200
+- rl : 0 7000 (or 200)
+- ri : -7946 8000 ~ 10000 (300?)
+- t : 0.941 ~ 1
 

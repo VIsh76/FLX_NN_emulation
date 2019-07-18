@@ -13,6 +13,15 @@ def print_ram_usage():
     ram_usage = round(process.memory_info().rss/float(2**30), 2)
     print("RAM usage: {}GB".format(ram_usage))
 
+
+def medium_pred(Mlist,x):
+    for i,m in enumerate(Mlist):
+        if i>0:
+            y=y+m.predict(x)
+        else:
+            y=m.predict(x)
+    return(y/len(Mlist))
+
 # Plot Fonctions :
 class F_and_plots:
     def __init__(self,shape, figsize=(15,10)):
