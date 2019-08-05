@@ -7,7 +7,7 @@ import tables
 ### This file contains the function from_net_to_pd which convert a netcf4 file into a pd dataframe with more random batches
 # Sadly the execution time is too slow because of the randomisation (it should take more than 1h to convert 1 file)
 
-def Convert_random_all_from(Xdim, Ydim, in_folder, out_folder, div=5, noutput=25):
+def Convert_random_all_from(Xdim, Ydim, in_folder, out_folder0, div=5, noutput=25):
     """
     Convert all files in in_folder to hdf5, divide them into div and save them in out_folder
     each generated folder correspond to one file.
@@ -19,17 +19,22 @@ def Convert_random_all_from(Xdim, Ydim, in_folder, out_folder, div=5, noutput=25
     data_folder = in_folder
     lst_files = os.listdir(data_folder)
     lst_files.sort()
-    out_folder0 = out_folder
 
+    N = lst_files[0].split('.')[-2]
+    out_folder = os.path.join(out_folder0, N)
+    print(out_folder)
     ids_n = np.arange(Xdim*div); np.random.shuffle(ids_n)
     ids_p = np.arange(Ydim*div); np.random.shuffle(ids_p)
+    if not os.path.isdir(out_folder):
+        print('Creating out_folder', out_folder)
+        os.mkdir(out_folder)
 
     ndiv = Xdim
     pdiv = Ydim
     noutput = min(noutput, div*div)
     for i in range(div):
         for j in range(div):
-            if(i*div+j)<noutput:                
+            if(i*div+j)<noutput:
                 name_out, extension = os.path.splitext(lst_files[i*div+j+25])
                 name_in, extension = os.path.splitext(lst_files[i*div+j])
 

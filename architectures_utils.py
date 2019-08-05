@@ -178,7 +178,6 @@ class LossHistory(keras.callbacks.Callback):
             self.losses[n] = [0]
 
     def on_batch_end(self, batch, logs={}):
-        #print(logs['batch'])
         if(batch%self.frequency!=0):
             for n in self.loss_name:
                 self.losses[n][-1] += logs.get(n)

@@ -252,10 +252,11 @@ class Preprocessed_Generator(Basic_Generator):
         Y = self.Y[el_ids]
         X=X.swapaxes(1,2)
         return X,Y
+
 ######## Differenciate Y and take only differences in flx as the output
 class FLX_Cumulative_Generator(Preprocessed_Generator):
     """
-    Generate the cumulative FLX
+    Generate the cumulative FLX, and the bias at level 0
     """
     def __init__(self, folder=data_folder, train=True, batch_size=64, shuffle=True, \
                  custom_b_p_e = 0, preprocess_x=[]):
@@ -263,14 +264,40 @@ class FLX_Cumulative_Generator(Preprocessed_Generator):
                                                     preprocess_x=preprocess_x)
 
     def apply_preprocess_y(self,Y):
+        """
+        Produce the cumulative
+        """
         Y= super(FLX_Cumulative_Generator, self).apply_preprocess_y(Y)
         idflx = np.array( [ self.variables_pred.index(name) for name in ['flxu', 'flxd']])
         Y = Y[:, idflx]
-        Y = (-Y[:,0, 1:] + Y[:,1, 1:]) # store FLX, onyl the 72 lowest, the more important
+        Y0 = (Y[:,1, [0]] - Y[:,0, [0]])
+        Y = (Y[:,1, 1:] - Y[:,0, 1:]) - Y0 # store FLX, onyl the 72 lowest, the more important
         if(Y.shape[-1]==1):
             Y = Y.reshape(Y.shape[0],Y.shape[1])
-        return Y
+        return np.concatenate([Y0, Y], axis=-1)
 
+###########################
+class FLX_Diff_Bias_Generator(Preprocessed_Generator):
+    """
+    Generate the cumulative FLX, and the bias at level 0
+    """
+    def __init__(self, folder=data_folder, train=True, batch_size=64, shuffle=True, \
+                 custom_b_p_e = 0, preprocess_x=[]):
+        super(FLX_Diff_Bias_Generator, self).__init__(folder, train, batch_size, shuffle, custom_b_p_e, \
+                                                    preprocess_x=preprocess_x)
+
+    def apply_preprocess_y(self,Y):
+        Y= super(FLX_Diff_Bias_Generator, self).apply_preprocess_y(Y)
+        idflx = np.array( [ self.variables_pred.index(name) for name in ['flxu', 'flxd']])
+        Y = Y[:, idflx]
+        Y0 = (Y[:,0, [0]] - Y[:,1, [0]])
+        Y = (Y[:,1, :] - Y[:,0, :]) # store FLX, onyl the 72 lowest, the more important
+        Y = Y[:, 1:] - Y[:, :-1]
+        if(Y.shape[-1]==1):
+            Y = Y.reshape(Y.shape[0],Y.shape[1])
+        return np.concatenate([-Y0, -Y], axis=-1)
+
+###########################
 
 class Full_Diff_Generator(Preprocessed_Generator):
     def __init__(self, folder=data_folder, train=True, batch_size=64, shuffle=True, \
@@ -329,22 +356,18 @@ class FLX_AE_Generator(Full_Diff_Generator):
         X,Y = self.change_y(Y)
         return X,Y
 
-
 class FLX_Generator(Full_Diff_Generator):
-    def __init__(self, folder=data_folder, train=True, batch_size=64, shuffle=True, \
+        def __init__(self, folder=data_folder, train=True, batch_size=64, shuffle=True, \
                  custom_b_p_e = 0, preprocess_x=[], chosen_var=['flxu', 'flxd']):
-        super(FLX_Generator, self).__init__(folder, train, batch_size, shuffle, custom_b_p_e, \
+                 super(FLX_Generator, self).__init__(folder, train, batch_size, shuffle, custom_b_p_e, \
                                                     preprocess_x=preprocess_x, chosen_var=['flxu', 'flxd'])
 
-    def apply_preprocess_y(self,Y):
-        Y= super(FLX_Generator,self).apply_preprocess_y(Y)
-        Y = -Y[:,:,0] + Y[:,:,1]
-        if(Y.shape[-1]==1):
-            Y = Y.reshape(Y.shape[0],Y.shape[1])
-        return Y
-
-
-
+        def apply_preprocess_y(self,Y):
+            Y= super(FLX_Generator,self).apply_preprocess_y(Y)
+            Y = -Y[:,:,0] + Y[:,:,1]
+            if(Y.shape[-1]==1):
+                Y = Y.reshape(Y.shape[0],Y.shape[1])
+            return Y
 
 
 class FLX_Generator(Full_Diff_Generator):

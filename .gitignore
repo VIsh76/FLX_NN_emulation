@@ -3,6 +3,7 @@
 *.h5
 *.hdf5
 TrainedModels
+SavedModels
 # nc4 files
 *.nc4
 # Images
