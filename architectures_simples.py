@@ -13,12 +13,16 @@ import os
 import numpy as np
 from contextlib import redirect_stdout
 from CST import CST
-# Simples architecture are saved if the need to reused them is presented
 
-# Small Models :
+# Simples architecture are saved
+
 def Upsampler(avg, pooling, input_shape):
     """
-    Generate a Upsampler model
+    Generate a Upsampler model, perform a
+    avg : size of upsampling
+    pooling : size of pooling
+    input_shape : shape of the input
+    adverage is perform on avg/pooling terms
     """
     Input0 = Input(shape=input_shape)
     Up = UpSampling1D(avg)(Input0)
@@ -28,7 +32,7 @@ def Upsampler(avg, pooling, input_shape):
 
 def Divide_Recombine(o_channel, in_channel,lev=CST.lev(CST), reg=0.001):
     """
-    Generate several Dense layer from the same input and combine them
+    Generate a pseudo-fully connected layer where each layer of the profile is fully connected to its outputs only
     """
     Input0 = Input(shape=(in_channel,lev), name='Input_RC0')
     Input1 = Flatten(name='Last_flatten')(Input0)
@@ -55,8 +59,8 @@ def Divide_Substract(o_channel, in_channel,lev=CST.lev(CST), reg=0.00001):
 # Dict Makers Models
 def MakeDictMatrix(D, header, lev=72):
     """
-    from a preproc dictionnary return two matrix, one for substraction one for multiplication
-    Doing (X-M1)*M2 is equivalent to applying the preproc normalisation
+    From a prepross dictionnary return two matrix, one for substraction one for multiplication
+    Doing (X-Ms)*Mp is equivalent to applying the preproc normalization
     """
     Ms = np.zeros((1, lev, len(header)))
     Mp = np.ones((1, lev, len(header)))
@@ -67,6 +71,10 @@ def MakeDictMatrix(D, header, lev=72):
     return(Ms,Mp)
 
 def MakeDictNet(Ms,Mp):
+    """
+    From the output of MakeDictMatrix, generate from the two matrix,
+    a keras model performing (X-Ms)*Mp
+    """
     Ts1 = tf.cast(Ms, dtype=tf.float32)
     Tp1 = tf.cast(Mp, dtype=tf.float32)
     D1s = lambda x : keras.layers.Subtract()([x, Ts1])
@@ -80,11 +88,20 @@ def MakeDictNet(Ms,Mp):
 
 class ConvDP2(Layer):
     """
-    Stacked Layers of
-    Convolution, Activation function,
-    nb_filters, ks as kernel_size
+    Stacked Layers of :
+    - Convolution, Activation function,
+    can be used for more clarity but slow down the training (hence not used)
     """
     def __init__(self, nb_filter, ks, act, dpr, bias, reg, ide, **kwargs):
+        """
+        nb_filters : number of filter
+        ks : (int) kernel_size
+        act : (int) activation
+        dpr : dropout rate
+        bias : (bool) use_bias
+        reg : reg weight
+        id : (int) ID for layer's name
+        """
         self.nb_filter = nb_filter
         self.ks = ks
         if(type(ks)==int):
@@ -118,7 +135,7 @@ class ConvDP2(Layer):
 # 2D convertion
 class Perturbate(Layer):
     """
-    Add with the size of the input (instead of the output channel size)
+    Simulated perturbation (add a matrix to the input)
     """
     def __init__(self, **kwargs):
 #        self.output_dim = output_dim
@@ -142,7 +159,7 @@ class Perturbate(Layer):
 
 def Expander(lev):
     """
-    Expand an input of size (lev, n_v) to (lev, lev, n_v)
+    Return a model that expand an input of size (lev, n_var) to (lev, lev, n_var)
     """
     expand = lambda x : K.expand_dims(x, axis=-1)
     repeat = lambda x : K.repeat_elements(x, lev, axis=-1)
@@ -153,7 +170,7 @@ def Expander(lev):
     M.add(Repeat)
     return(M)
 
-#### ARCHITECTURES
+#### OLD ARCHITECTURES, replace by Bidir_Casual_Conv
 
 def Old_Bidir(in_channel=11, out_channel=3):
     modelbd = Sequential(name="Sequential_1")
@@ -217,94 +234,6 @@ def Add_Upsampling(M_seq, shape, avg, pooling):
     newOutputs2 = M_seq(newOutputs)
     model2 = keras.Model(newInput, newOutputs2)
     return model2
-
-
-#### Fully Conv :
-def Bidir_Casual_Conv(list_of_kernel_s, list_of_filters, ups, pooling, in_channel, o_channel, lev=CST.lev(CST)):
-    """
-    used as input for the Unet
-    """
-    Input0 = Input(shape=(lev, in_channel), name=Name('Input',0), dtype='float32')
-
-    Flip_layer = lambda x: K.reverse(x, axes=0)
-    I_cp = UpSampling1D(ups, name=Name('Up',0))(Input0)
-    I_avg = AveragePooling1D(pooling, padding='same', stride=ups, name='AVG_p')(I_cp)
-    I_avg_flip = Lambda(Flip_layer, name=Name('Flip',0))(I_avg)
-
-    Conv1u = [I_avg]
-    Conv1d = [I_avg_flip]
-
-    # Normal
-    for i in range(len(list_of_filters[0])):
-        Conv1u.append(Conv1D(filters = list_of_filters[0][i], kernel_size= list_of_kernel_s[0][i], \
-                        padding='causal', activation='relu', name=Name("Conv_u",i+1), use_bias=True)(Conv1u[-1]))
-    # Flipped
-    for i in range(len(list_of_filters[1])):
-        Conv1d.append(Conv1D(filters = list_of_filters[1][i], kernel_size= list_of_kernel_s[1][i],\
-                        padding='causal', activation='relu', name=Name("Conv_d",i+1), use_bias=True)(Conv1d[-1]))
-
-    C_flip = Lambda(Flip_layer,name=Name('Flip',1))(Conv1d[-1])
-    C1d_prime = [Concatenate( name=Name('Concat',0))([Conv1u[-1], C_flip])]
-    for i in range(len(list_of_filters[2])):
-        if i==len(list_of_kernel_s)-1:
-            C1d_prime.append(Conv1D(filters = list_of_filters[2][i], kernel_size=list_of_kernel_s[2][i], \
-                            padding='causal', name=Name("Conv_conc",i), use_bias=False)(C1d_prime[-1]))
-        else:
-            C1d_prime.append(Conv1D(filters = list_of_filters[2][i], kernel_size=list_of_kernel_s[2][i], \
-                            padding='causal', name=Name("Conv_conc",i), use_bias=False, activation='relu')(C1d_prime[-1]))
-    return keras.Model(Input0, C1d_prime[-1])
-
-
-def Unet(list_of_kernels_s, list_of_filters, list_of_pooling, Div=3, lev=CST.lev(CST), in_channel=11, o_channel=CST.output_y(CST)):
-    """
-    Generate a Unet-Archictecture
-    list_of_kernels : list of 2 lists containing the kernel size for convolution
-    list_of_filters : list of 2 lists containing the number of filters for convolution
-    Div : number of downscaling
-    in_channel : number of inputs
-    """
-    Concats_l = []
-    Upsamplings_l = []
-    Convs_l1 = []
-    Convs_l2 = []
-    Poolings_l = []
-# DownScaling
-    Convs_l1.append(Input(name = 'Origin_Input',  dtype='float32', shape=(lev, in_channel)))
-    for i in range(Div):
-        Poolings_l.append(AveragePooling1D(list_of_kernels_s[0][i]-1, padding='same', stride=2, name=Name('AVG', i+1))(Convs_l1[-1]))
-        Convs_l1.append(Conv1D(filters=list_of_filters[0][i], kernel_size=list_of_kernels_s[0][i], \
-                                padding='same', activation='relu', name=Name('Conv1',i+1))( Poolings_l[-1] ))
-
-# Operation done on the small dimension : here fc
-    Convs_l2.append(Flatten()(Convs_l1[-1])  )
-    Convs_l2.append(Dense( int(lev/2**Div) * list_of_filters[1][0], name=Name('Dense',0)  )(Convs_l2[-1])  )
-    Convs_l2.append(Reshape(name='Reshape',input_shape=Convs_l2[-1].shape ,\
-                            target_shape=( int(lev/2**Div)  ,  list_of_filters[1][0] ))(Convs_l2[-1]))
-
-# Upsampling and concats
-    for i in range(Div):
-        Concats_l.append(Concatenate( name=Name('Concat',i+1) )([Convs_l2[-1], Convs_l1[-i-1]]))
-        Upsamplings_l.append(UpSampling1D(2, name=Name('Ups',i+1))(Concats_l[-1]))
-        Convs_l2.append(Conv1D(filters=list_of_filters[2][i], kernel_size=list_of_kernels_s[2][i], \
-                                padding='same', activation='relu', name=Name('Conv2',i+1))( Upsamplings_l[-1] ))
-    Conv3 = Conv1D(filters=o_channel, kernel_size=1, padding='same', use_bias=False)(Convs_l2[-1])
-    return keras.Model(Convs_l1[0],Conv3)
-###### FC
-def FixInputs_C(model, inputs):
-    """
-    Fix the ts variable in a FC architecture (considerer as the last variable)
-    """
-    first_input = K.constant(inputs[0])
-    second_input = K.constant(inputs[1][:,:-1])
-
-    Tensor_Input0 = Input(batch_shape = (model.input_shape[1][0], 1))
-
-    n_input = keras.layers.Lambda(lambda x: K.concatenate([second_input,x],axis=-1))(Tensor_Input0)
-    n2_input = keras.layers.Lambda(lambda x: [first_input, x])(n_input)
-    Out1 = model(n2_input)
-    Out2 = keras.layers.Lambda(lambda x : x)(Out1)
-    M = keras.Model( Tensor_Input0, Out2  )
-    return(M)
 
 
 def FixInputsFC(model, inputs):

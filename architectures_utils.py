@@ -9,11 +9,17 @@ from keras import regularizers
 
 from contextlib import redirect_stdout
 from CST import CST
-# Simples architecture are saved if the need to reused them is presented
 
+# Various Utils fonction for architectures
+
+#Naming
 def Name(layer,i):
+    """
+    Set Name by combining layer name (string) and an id (int)
+    """
     return layer+'_'+str(i)
 
+# Reshaping
 def reshape(y, n_shape):
     y0=reshape(y.shape[0], n_shape[0], n_shape[1])
     return(y0)
@@ -21,12 +27,15 @@ def reshape(y, n_shape):
 def y_batch_reshape(y):
     return(reshape(y, CST.lev(CST)), CST.outputs_y(CST))
 
-
+# LOSSES
 def one_loss(y_true, y_pred, i):
+    """
+    MSE on particular var
+    """
     E = mean_squared_error(y_true[:, :, i], y_pred[:, :, i])
     return E
 
-# Normal Losses
+# OLD LOSS : flxu,flxd, dfdts
 def flxd_loss(y_true, y_pred):
     E = mean_squared_error(y_true[:, :, 0], y_pred[:, :, 0])
     return E
@@ -36,25 +45,29 @@ def flxu_loss(y_true, y_pred):
 def dfdts_loss(y_true, y_pred, coef=50):
     E = mean_squared_error(coef*y_true[:, :, 2], coef*y_pred[:, :, 2])
     return E
-
 def total_loss(y_true, y_pred):
     E = flxd_loss(y_true, y_pred)
     E += flxu_loss(y_true, y_pred)
     E += dfdts_loss(y_true, y_pred)
     return E
 
-def Up_Down_loss(y_true, y_pred):
+# Losse for full flx
+def Up_Down_loss_sep(y_true, y_pred):
+    """
+    Compute the loss of flxd and flxu
+    """
     E = flxd_loss(y_true, y_pred)
     E += flxu_loss(y_true, y_pred)
-#    E += dfdts_loss(y_true, y_pred)
     return E
 
 def lower_loss(y_true, y_pred, lev = 40):
+    """
+    Compute MSE in the lower levels only
+    """
     E = flxd_loss(y_true, y_pred)
     E += flxu_loss(y_true, y_pred)
     E += dfdts_loss(y_true, y_pred)
     return E
-
 
 # FC Losses
 def total_loss_fc(y_true, y_pred, lev=72, n_input=3):
@@ -74,7 +87,6 @@ def flxu_loss_fc(y_true, y_pred,lev= CST.lev(CST)):
 def dfdts_loss_fc(y_true, y_pred, coef=50, lev= CST.lev(CST)):
     E = mean_squared_error(coef*y_pred[:,(2*lev):(3*lev)], coef*y_pred[:, (2*lev):(3*lev)])
     return E
-
 
 ### Cross Enthorpy
 def LogLoss(y_true, y_pred):
@@ -96,18 +108,25 @@ def Grad_ts(model_ffc, x):
     o = np.array(grad0([ts]))[:,:,0]
     return(o)
 
-##########""# ACTIVATION GENERATOR
+########### ACTIVATION GENERATOR
 
+# SWISH
 from keras.utils.generic_utils import get_custom_objects
-
 def swish_activation(x):
     return K.sigmoid(x)*x
-
 get_custom_objects().update({'swish': Activation(swish_activation)})
 
 
+# ACTIVATION
 class Activation_Generator():
+    """
+    This class generates activation layers given one of the keys, allows to change the
+    activation easiely in architectures
+    """
     def __init__(self):
+        """
+        generate the class for calls
+        """
         pass
 
     @property
@@ -115,6 +134,12 @@ class Activation_Generator():
         return(['sigmoid', 'elu', 'softplus', 'tanh', 'relu', 'leakyrelu','linear' ])
 
     def __call__(self, act,name, *arg):
+        """
+        Create an activation layer
+        act : type of act
+        name : name of layer
+        *arg : additional argument for activation
+        """
         if act== 'sigmoid':
             la = Activation('sigmoid')
         elif act== 'softplus':
@@ -148,8 +173,10 @@ class Activation_Generator():
 
 
 ### CALLBACKS
-
 class SGDLearningRateTracker(keras.callbacks.Callback):
+    """
+    Return learning rate
+    """
     def on_epoch_end(self, epoch, logs={}):
         optimizer = self.model.optimizer
         lr = K.eval(optimizer.lr * (1. / (1. + optimizer.decay * K.cast(optimizer.iterations, 'float32_ref'))))
@@ -157,9 +184,13 @@ class SGDLearningRateTracker(keras.callbacks.Callback):
 
 class LossHistory(keras.callbacks.Callback):
     """
-    Callback that keep an historic of the losses with more frequency
+    Callback that keep an history of the training losses with more frequency
     """
     def __init__(self, frequency=1000, losses=['flxu_loss', 'flxd_loss', 'dfdts_loss', 'loss']):
+        """
+        frequency : size of the mean, should be set as generator.batch_per_epoch
+        losses : list of the loss to keep track of, has to set as metrics when compile
+        """
         super(LossHistory, self).__init__()
         self.frequency=frequency
         self.current_batch=0
@@ -185,10 +216,6 @@ class LossHistory(keras.callbacks.Callback):
             for n in self.loss_name:
                 self.losses[n][-1] /= self.frequency
                 self.losses[n].append( logs.get(n))
-
-#    def on_epoch_end(self, logs={}):
-#        for n in self.loss_name:
-#            self.losses[n][-1] /= self.frequency
 
 def Return_print(x):
     """

@@ -3,7 +3,7 @@ import numpy as np
 import os
 import tables
 
-#Xdim=144, Ydim=864
+# Xdim=144, Ydim=864
 ### This file contains the function from_net_to_pd which convert a netcf4 file into a pd dataframe with more random batches
 # Sadly the execution time is too slow because of the randomisation (it should take more than 1h to convert 1 file)
 

@@ -1,9 +1,11 @@
+# Store CST for models
+
 class CST(object):
     _model_folder="TrainedModels"
-    _data_folder='Data'
+    _data_folder='Data3'
     _log_folder='Logs'
     _lev = 72
-    _output_y = 3
+    _output_y = 1
 
     @staticmethod
     def Model_folder(cls):
