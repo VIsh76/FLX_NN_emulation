@@ -3,7 +3,9 @@ import keras
 from keras import regularizers
 from keras.models import Sequential
 from keras.layers import Dense, LSTM, Activation, Flatten, Input, TimeDistributed, Concatenate
-from keras.layers import Conv1D, UpSampling1D, AveragePooling1D, SeparableConv1D, MaxPooling1D
+from keras.layers import Conv1D, UpSampling1D,  SeparableConv1D, MaxPooling1D, Dropout,AveragePooling1D
+from keras.layers import UpSampling2D, Conv2D, AveragePooling2D
+
 from keras.layers import Bidirectional, Lambda, Reshape, SpatialDropout1D
 from keras.losses import mean_squared_error
 from keras import backend as K
@@ -343,7 +345,8 @@ def Unet_Act_Double_DP_Bias(list_of_kernels_s, list_of_filters, list_of_activati
 
 ############## Unet_Act_Double_2D
 def Unet_Act_Double_2D(list_of_kernels_s, list_of_filters, list_of_activations, list_of_dropout,
-                       params=[], Div=3, lev=CST.lev(CST), in_channel=11, reg=0.0):
+                       params=[], Div=3, lev=CST.lev(CST), in_channel=11, reg=0.0,
+                       data_format='channels_first'):
     """
     Generate a Unet-Archictecture:
     list_of_kernels : list of 3 lists containing the kernel size for convolution
@@ -357,13 +360,17 @@ def Unet_Act_Double_2D(list_of_kernels_s, list_of_filters, list_of_activations, 
     """
     AG = Activation_Generator()
     Sizes = [ len(list_of_filters[i]) for i in range(len(list_of_filters)) ]
-
+    if data_format=='channels_first':
+        concat_axis=1
+    else:
+        concat_axis=-1
 #First Convolutions
-    Conv_l0 = [Input(name='Origin_Input', dtype='float32', shape=(lev, lev, in_channel))]
+    Conv_l0 = [Input(name='Origin_Input', dtype='float32', shape=(in_channel, lev, lev))]
     for i in range(Sizes[0]):
         Conv_l0.append(Conv2D(filters=list_of_filters[0][i], kernel_size=list_of_kernels_s[0][i],
                             padding='same', use_bias=False, name=Name('Conv', i),
-                            kernel_regularizer=regularizers.l1(reg))(Conv_l0[-1]))
+                            kernel_regularizer=regularizers.l1(reg),
+                            data_format=data_format)(Conv_l0[-1]))
         Conv_l0.append( AG(list_of_activations[0][i], Name(list_of_activations[0][i], i), params)(Conv_l0[-1]))
         Conv_l0.append(Dropout(list_of_dropout[0][i])(Conv_l0[-1]))
 
@@ -372,12 +379,12 @@ def Unet_Act_Double_2D(list_of_kernels_s, list_of_filters, list_of_activations, 
     for i in range(Sizes[1]//2):
         Conv_l1.append(AveragePooling2D(pool_size=(2,2), strides=(2,2), padding='same', name=Name('AVG', i+100))(Conv_l1[-1]))
         Conv_l1.append(Conv2D(filters=list_of_filters[1][2*i], kernel_size=list_of_kernels_s[1][2*i],
-                               padding='same', name=Name('Conv', i+100))(Conv_l1[-1] ))
+                               padding='same', name=Name('Conv', i+100),data_format=data_format)(Conv_l1[-1] ))
         Conv_l1.append(AG(list_of_activations[1][2*i], Name(list_of_activations[1][2*i], 100+i), params )(Conv_l1[-1]) )
         Conv_l1.append(Dropout(list_of_dropout[1][2*i])(Conv_l1[-1]))
 
         Conv_l1.append(Conv2D(filters=list_of_filters[1][2*i+1], kernel_size=list_of_kernels_s[1][2*i+1],
-                               padding='same', name=Name('Conv', 110+i))(Conv_l1[-1]) )
+                               padding='same', name=Name('Conv', 110+i),data_format=data_format)(Conv_l1[-1]) )
         Conv_l1.append(AG(list_of_activations[1][2*i+1], Name(list_of_activations[1][2*i+1], 110+i), params )(Conv_l1[-1]))
         Conv_l1.append(Dropout(list_of_dropout[1][2*i+1])(Conv_l1[-1]))
 
@@ -385,22 +392,22 @@ def Unet_Act_Double_2D(list_of_kernels_s, list_of_filters, list_of_activations, 
     Conv_l2 = [(Conv_l1[-1])]
     for i in range(Sizes[2]):
         Conv_l2.append(Conv2D(filters=list_of_filters[2][i], kernel_size=(int(lev/2**Div), int(lev/2**Div)),
-                               padding='same', name=Name('Dense', i))(Conv_l2[-1]))
+                               padding='same', name=Name('Dense', i), data_format=data_format)(Conv_l2[-1]))
         Conv_l2.append(AG(list_of_activations[2][i], list_of_activations[2][i]+'_d_'+str(i), params)(Conv_l2[-1]))
         Conv_l2.append(Dropout(list_of_dropout[2][i])(Conv_l2[-1]))
     Conv_l3 = [Conv_l2[-1]]
 
 # Upsampling and concats
     for i in range(Sizes[3]//2):
-        Conv_l3.append( Concatenate( name=Name('Concat',i+300) )([Conv_l3[-1], Conv_l1[-(1+i*7)]]))
+        Conv_l3.append( Concatenate( name=Name('Concat',i+300),axis=concat_axis )([Conv_l3[-1], Conv_l1[-(1+i*7)]]))
         Conv_l3.append(UpSampling2D(size=(2, 2), name=Name('Ups',i+200))(Conv_l3[-1]))
         Conv_l3.append(Conv2D(filters=list_of_filters[3][2*i], kernel_size=list_of_kernels_s[3][2*i], padding='same',
-                               name=Name('Conv', i+200))(Conv_l3[-1] ))
+                               name=Name('Conv', i+200), data_format=data_format)(Conv_l3[-1] ))
         Conv_l3.append( AG(list_of_activations[3][2*i], Name(list_of_activations[3][2*i], 200+i), params )(Conv_l3[-1]) )
         Conv_l3.append(Dropout(list_of_dropout[3][2*i])(Conv_l3[-1]))
 
         Conv_l3.append(Conv2D(filters=list_of_filters[3][2*i+1], kernel_size=list_of_kernels_s[3][2*i+1], padding='same',
-                               name=Name('Conv', i + 210))(Conv_l3[-1]))
+                               name=Name('Conv', i + 210), data_format=data_format)(Conv_l3[-1]))
         Conv_l3.append(AG(list_of_activations[3][2*i+1], Name(list_of_activations[3][2*i+1], 210 + i), params)(Conv_l3[-1]))
         Conv_l3.append(Dropout(list_of_dropout[3][2*i+1])(Conv_l3[-1]))
 
@@ -409,19 +416,17 @@ def Unet_Act_Double_2D(list_of_kernels_s, list_of_filters, list_of_activations, 
     for i in range(Sizes[4]):
         Conv_l4.append(Conv2D(filters=list_of_filters[4][i], kernel_size=list_of_kernels_s[4][i],
                             padding='same', use_bias=False, name=Name('Conv3',i+300),
-                            activity_regularizer=regularizers.l2(reg))(Conv_l4[-1]))
+                            activity_regularizer=regularizers.l2(reg), data_format=data_format)(Conv_l4[-1]))
 
         Conv_l4.append( AG(list_of_activations[4][i], Name(list_of_activations[4][i], 300+i), params )(Conv_l4[-1]) )
-        if i<2:
-            Conv_l4.append(Dropout(list_of_dropout[4][i])(Conv_l4[-1]))
-
+        Conv_l4.append(Dropout(list_of_dropout[4][i])(Conv_l4[-1]))
     return keras.Model(Conv_l0[0], Conv_l4[-1])
 
-############ Unet_Act_Double_2D2
-def Unet_Act_Double_2D2(list_of_kernels_s, list_of_filters, list_of_activations, list_of_dropout,
-                       params=[], Div=3, lev=CST.lev(CST), in_channel=11, reg=0.0):
+def Unet_Act_Double_AE_2D(list_of_kernels_s, list_of_filters, list_of_activations, list_of_dropout,
+                       params=[], Div=3, lev=CST.lev(CST), in_channel=11, reg=0.0,
+                       data_format='channels_first'):
     """
-    Generate a Unet-Archictecture :
+    Generate a Unet-Archictecture:
     list_of_kernels : list of 3 lists containing the kernel size for convolution
     list_of_filters : list of 3 lists containing the number of filters for convolution
     list_of_activations : list of 3 list containing the names of the activation function
@@ -431,48 +436,67 @@ def Unet_Act_Double_2D2(list_of_kernels_s, list_of_filters, list_of_activations,
     in_channel : number of inputs
     reg : weights regularizers (should be 0 if you use dropout)
     """
-#    AG = Activation_Generator()
+    AG = Activation_Generator()
     Sizes = [ len(list_of_filters[i]) for i in range(len(list_of_filters)) ]
-
+    if data_format=='channels_first':
+        concat_axis=1
+    else:
+        concat_axis=-1
 #First Convolutions
-    Conv_l0 = [Input(name='Origin_Input', dtype='float32', shape=(lev, lev, in_channel))]
+    Conv_l0 = [Input(name='Origin_Input', dtype='float32', shape=(in_channel, lev, lev))]
     for i in range(Sizes[0]):
-        Conv_l0.append( ConvDP2(nb_filter=list_of_filters[0][i], ks=list_of_kernels_s[0][i], bias=False,
-                                    dpr=list_of_dropout[0][i], act=list_of_activations[0][i],reg=reg, ide=i)(Conv_l0[-1]))
+        Conv_l0.append(Conv2D(filters=list_of_filters[0][i], kernel_size=list_of_kernels_s[0][i],
+                            padding='same', use_bias=False, name=Name('Conv', i),
+                            kernel_regularizer=regularizers.l1(reg),
+                            data_format=data_format)(Conv_l0[-1]))
+        Conv_l0.append( AG(list_of_activations[0][i], Name(list_of_activations[0][i], i), params)(Conv_l0[-1]))
+        Conv_l0.append(Dropout(list_of_dropout[0][i])(Conv_l0[-1]))
 # DownScaling
     Conv_l1 = [Conv_l0[-1]]
     for i in range(Sizes[1]//2):
         Conv_l1.append(AveragePooling2D(pool_size=(2,2), strides=(2,2), padding='same', name=Name('AVG', i+100))(Conv_l1[-1]))
-        Conv_l1.append( ConvDP2(nb_filter=list_of_filters[1][2*i], ks=list_of_kernels_s[1][2*i], bias=True,
-                                    dpr=list_of_dropout[0][i], act=list_of_activations[1][2*i],reg=reg, ide=100+2*i)(Conv_l1[-1]))
-        Conv_l1.append( ConvDP2(nb_filter=list_of_filters[1][2*i+1], ks=list_of_kernels_s[1][2*i+1], bias=True,
-                                    dpr=list_of_dropout[0][i], act=list_of_activations[1][2*i+1],reg=reg, ide=100+2*i+1)(Conv_l1[-1]))
+        Conv_l1.append(Conv2D(filters=list_of_filters[1][2*i], kernel_size=list_of_kernels_s[1][2*i],
+                               padding='same', name=Name('Conv', i+100),data_format=data_format)(Conv_l1[-1] ))
+        Conv_l1.append(AG(list_of_activations[1][2*i], Name(list_of_activations[1][2*i], 100+i), params )(Conv_l1[-1]) )
+        Conv_l1.append(Dropout(list_of_dropout[1][2*i])(Conv_l1[-1]))
+
+        Conv_l1.append(Conv2D(filters=list_of_filters[1][2*i+1], kernel_size=list_of_kernels_s[1][2*i+1],
+                               padding='same', name=Name('Conv', 110+i),data_format=data_format)(Conv_l1[-1]) )
+        Conv_l1.append(AG(list_of_activations[1][2*i+1], Name(list_of_activations[1][2*i+1], 110+i), params )(Conv_l1[-1]))
+        Conv_l1.append(Dropout(list_of_dropout[1][2*i+1])(Conv_l1[-1]))
 
 # Operation done on the small dimension : here fc
     Conv_l2 = [(Conv_l1[-1])]
     for i in range(Sizes[2]):
-        Conv_l2.append( ConvDP2(nb_filter=list_of_filters[2][i], ks=(int(lev/2**Div), int(lev/2**Div)), bias=True,
-                                    dpr=list_of_dropout[0][i], act=list_of_activations[2][i], reg=reg, ide=200+i)(Conv_l2[-1]))
-
-    Conv_l3 = [Conv_l2[-1]]
+        Conv_l2.append(Conv2D(filters=list_of_filters[2][i], kernel_size=(int(lev/2**Div), int(lev/2**Div)),
+                               padding='same', name=Name('Dense', i), data_format=data_format)(Conv_l2[-1]))
+        Conv_l2.append(AG(list_of_activations[2][i], list_of_activations[2][i]+'_d_'+str(i), params)(Conv_l2[-1]))
+        Conv_l2.append(Dropout(list_of_dropout[2][i])(Conv_l2[-1]))
 
 # Upsampling and concats
+    Conv_l3 = [Conv_l2[-1]]
     for i in range(Sizes[3]//2):
-        Conv_l3.append( Concatenate( name=Name('Concat',i+300) )([Conv_l3[-1], Conv_l1[-(1+i*3)]]))
-        Conv_l3.append(UpSampling2D(size=(2, 2), name=Name('Ups',i+300))(Conv_l3[-1]))
+        Conv_l3.append(UpSampling2D(size=(2, 2), name=Name('Ups',i+200))(Conv_l3[-1]))
+        Conv_l3.append(Conv2D(filters=list_of_filters[3][2*i], kernel_size=list_of_kernels_s[3][2*i], padding='same',
+                               name=Name('Conv', i+200), data_format=data_format)(Conv_l3[-1] ))
+        Conv_l3.append( AG(list_of_activations[3][2*i], Name(list_of_activations[3][2*i], 200+i), params )(Conv_l3[-1]) )
+        Conv_l3.append(Dropout(list_of_dropout[3][2*i])(Conv_l3[-1]))
 
-        Conv_l3.append( ConvDP2(nb_filter=list_of_filters[3][2*i], ks=list_of_kernels_s[3][2*i], bias=True,
-                                    dpr=list_of_dropout[0][i], act=list_of_activations[3][2*i],reg=reg, ide=300+2*i)(Conv_l3[-1]))
-        Conv_l3.append( ConvDP2(nb_filter=list_of_filters[3][2*i+1], ks=list_of_kernels_s[3][2*i+1], bias=True,
-                                    dpr=list_of_dropout[0][i], act=list_of_activations[3][2*i+1],reg=reg, ide=300+2*i+1)(Conv_l3[-1]))
+        Conv_l3.append(Conv2D(filters=list_of_filters[3][2*i+1], kernel_size=list_of_kernels_s[3][2*i+1], padding='same',
+                               name=Name('Conv', i + 210), data_format=data_format)(Conv_l3[-1]))
+        Conv_l3.append(AG(list_of_activations[3][2*i+1], Name(list_of_activations[3][2*i+1], 210 + i), params)(Conv_l3[-1]))
+        Conv_l3.append(Dropout(list_of_dropout[3][2*i+1])(Conv_l3[-1]))
 
 # Last Conv layers
     Conv_l4 = [Conv_l3[-1]]
     for i in range(Sizes[4]):
-        Conv_l4.append( ConvDP2(nb_filter=list_of_filters[4][i], ks=list_of_kernels_s[4][i], bias=False,
-                                    dpr=list_of_dropout[0][i], act=list_of_activations[4][i],reg=reg, ide=400+2*i+1)(Conv_l4[-1]))
-    return keras.Model(Conv_l0[0], Conv_l4[-1])
+        Conv_l4.append(Conv2D(filters=list_of_filters[4][i], kernel_size=list_of_kernels_s[4][i],
+                            padding='same', use_bias=False, name=Name('Conv3',i+300),
+                            activity_regularizer=regularizers.l2(reg), data_format=data_format)(Conv_l4[-1]))
 
+        Conv_l4.append( AG(list_of_activations[4][i], Name(list_of_activations[4][i], 300+i), params )(Conv_l4[-1]) )
+        Conv_l4.append(Dropout(list_of_dropout[4][i])(Conv_l4[-1]))
+    return keras.Model(Conv_l0[0], Conv_l4[-1])
 
 ###############Other uNets
 def Contraction(list_of_kernels_s, list_of_filters, list_of_activations,  list_of_dropout, params=[], Div=3, lev=CST.lev(CST), in_channel=11, reg=0.001):

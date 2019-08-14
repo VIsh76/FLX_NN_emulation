@@ -269,7 +269,8 @@ def Produce_netCDF4_jacobian(fh, header_x):
                 J2 = np.array(np.expand_dims(fh[v], axis=0))
                 flag=True
     return(J2)
-def Sep_Var_show_Log(F,J, header_x, T=True):
+
+def sep_Var_show_Log(F,J, header_x, T=True):
     """
     Show the Jacobian of each variable
     F : F and Plot class element of len len(header_x)
@@ -305,22 +306,22 @@ def Sep_Var_show(F,J, header_x, T=True):
     c, l, _ = J.shape
     n_var = len(header_x)
     lev = l
-    z = np.arange(1,73,1)
+    z = np.arange(1,l+1,1)
     for j in range(len(header_x)):
-        if j>0:
-            IMG = J[j]
-#            IMG = np.sign(J[j])*np.log(abs(J[j])+1)
-            maxf = np.max(np.abs(IMG))
-            if maxf == 0:
-                maxf = 1.0
-            incf = 2*maxf/51.
-            clevs = np.arange(-maxf,maxf+incf,incf)
-            im = F[j-1].contourf(z,z, IMG, clevs, cmap='PRGn')
-            F[j-1].set_title(header_x[j])
-            F[j-1].set_aspect('equal','box')
-            F[j-1].invert_yaxis()
-            F[j-1].invert_xaxis()
-            F.f.colorbar(im, ax=F[j-1])
+        IMG = J[j]
+        if T:
+            IMG=IMG.T
+        maxf = np.max(np.abs(IMG))
+        if maxf == 0:
+            maxf = 1.0
+        incf = 2*maxf/51.
+        clevs = np.arange(-maxf,maxf+incf,incf)
+        im = F[j].contourf(z,z, IMG, clevs, cmap='PRGn')
+        F[j].set_title(header_x[j])
+        F[j].set_aspect('equal','box')
+        F[j].invert_yaxis()
+        F[j].invert_xaxis()
+        F.f.colorbar(im, ax=F[j])
 
 
 def Produce_x_nc4(fh, i0,j0, header_x):

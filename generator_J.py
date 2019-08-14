@@ -5,13 +5,21 @@ import keras
 from netCDF4 import Dataset
 
 data_folder="Data"
+def convertion_name(idn):
+    """
+    return input and output name given the string of the common part
+    """
+    inputn = 'f522_dh.trainingdata_in.lcv.'+idn+'.hdf5'
+    outputn = 'jacobian_'+idn+'.npy'
+    return(inputn, outputn)
+
 class Basic_Generator_J(keras.utils.Sequence):
     """
     Use hdf5 datasets and simply return the desire variables
     To create a new Generator simply inherit this one and change '__init__' and __'data_generation
     Note that 'Basic_Generator' output are transposed to all its children class
     """
-    def __init__(self, folder=data_folder, tmp_folder='TmpFolder', batch_size=64, shuffle=True, custom_b_p_e = 0):
+    def __init__(self, folder, batch_size=64, shuffle=True, custom_b_p_e = 0):
         """
         folder : folder where all the folders are used
         batch_size : number of output
@@ -28,8 +36,8 @@ class Basic_Generator_J(keras.utils.Sequence):
         this is a parent function and shouldn't be used, instead use Preprocessed_Generator with preprocess_x=[]
         """
         # global parameters
+        self.path = folder
         self._set_init_true() # initialisation variable set true
-        self.tmp_folder = tmp
         self.batch_size = batch_size
         self.shuffle = shuffle
         self.max_b = custom_b_p_e
@@ -54,7 +62,7 @@ class Basic_Generator_J(keras.utils.Sequence):
 
     def _set_dirs(self, datafolder):
         """
-        Store the list of used directories
+        Store the list of used directories and files
         """
         self.List_of_dir = []
         self.List_of_files = dict()
@@ -63,10 +71,10 @@ class Basic_Generator_J(keras.utils.Sequence):
         for i in folders:
             if os.path.isdir(os.path.join(datafolder,i)) and i != '.ipynb_checkpoints': # ignore .ipynb_checkpoints, allowing the generator to work in Amazon
                 self.List_of_dir.append(os.path.join(datafolder,i))
-                self.List_of_files[i]=[]
-            for file in os.listdir(os.path.join(i, 'Input')):
-                if file.split('.')[-1] == '.hdf5':
-                    self.List_of_files[i].append(file.split('.')[-1])
+                self.List_of_files[os.path.join(datafolder,i)]=[]
+            for file in os.listdir(os.path.join(datafolder, i, 'Input')):
+                if file.split('.')[-1] == 'hdf5':
+                    self.List_of_files[os.path.join(datafolder,i)].append(file.split('.')[-2])
         self._nb_dir = len(self.List_of_dir)
 
     def _initialise_parameters(self):
@@ -76,7 +84,7 @@ class Basic_Generator_J(keras.utils.Sequence):
         """
         x, _ = self._load_a_couple0(self.load_a_path(0,0))
 
-        self._div = int(len(os.listdir(self.List_of_dir[0]))/2)
+        self._div = int(len(os.listdir(os.path.join(self.List_of_dir[0],'Input'))))
         self.variables = list(x.columns.levels[0])
         self.used_variables = list(x.columns.levels[0])
         self.variables_pred = ['dflxdpl', 'dflxdt', 'dflxdq', 'dflxdqi', 'dflxdql', 'dflxdo3']
@@ -103,9 +111,13 @@ class Basic_Generator_J(keras.utils.Sequence):
         """
         Given id of folder and file, return the corresponding path
         """
-        pair_name = self.List_of_files[id_fold][id_file]
-        input_path = os.path.join(self.List_of_dir[id_fold], 'Input', pair_name,'.hdf5')
-        output_path = os.path.join(self.List_of_dir[id_fold], 'Output', pair_name, '.npy' )
+#        print(id_fold, id_file)
+#        print(self.List_of_dir)
+#        print(self.List_of_files)
+        pair_name = self.List_of_files[self.List_of_dir[id_fold]][id_file]
+        input_name, output_name = convertion_name(pair_name)
+        input_path = os.path.join(self.List_of_dir[id_fold], 'Input', input_name)
+        output_path = os.path.join(self.List_of_dir[id_fold], 'Output', output_name)
         return (input_path, output_path)
 
     def _load_a_couple0(self, path):
@@ -219,9 +231,9 @@ class Basic_Generator_J(keras.utils.Sequence):
         """
         self.reload(folder_id, file_id)
         X = np.array(self.X.iloc[el_ids]).reshape(self.batch_size, len(self.used_variables), self.lev)
-        Y = np.array(self.Y.iloc[el_ids]).reshape(self.batch_size, len(self.variables_pred), self.lev+1)
+        Y = self.Y[:,:,:,el_ids]
         return X,Y
-
+        
 ######## Children Class, with preprocessing :
 
 class Preprocessed_Generator(Basic_Generator_J):

@@ -2,6 +2,7 @@ import keras
 from keras.models import Sequential
 from keras.layers import Dense, LSTM, Activation, Flatten, Input, TimeDistributed, Concatenate
 from keras.layers import Conv1D, UpSampling1D, AveragePooling1D, SeparableConv1D
+from keras.layers import Conv2D, UpSampling2D, AveragePooling2D
 from keras.layers import Bidirectional, Lambda, Reshape
 from keras.losses import mean_squared_error
 from keras import backend as K
@@ -16,7 +17,7 @@ from CST import CST
 
 # Simples architecture are saved
 
-def Upsampler(avg, pooling, input_shape):
+def Upsampler(avg, pooling, input_shape, data_format='channels_last'):
     """
     Generate a Upsampler model, perform a
     avg : size of upsampling
@@ -25,10 +26,23 @@ def Upsampler(avg, pooling, input_shape):
     adverage is perform on avg/pooling terms
     """
     Input0 = Input(shape=input_shape)
-    Up = UpSampling1D(avg)(Input0)
-    Avg = AveragePooling1D(pooling, padding='same', stride=avg)(Up)
+    Up = UpSampling1D(avg)(Input0, data_format=data_format)
+    Avg = AveragePooling1D(pooling, padding='same', stride=avg,
+                                    data_format=data_format)(Up)
     return keras.Model(Input0, Avg)
 
+def Upsampler2D(avg, pooling, input_shape):
+    """
+    Generate a Upsampler model, perform a
+    avg : size of upsampling
+    pooling : size of pooling
+    input_shape : shape of the input
+    adverage is perform on avg/pooling terms
+    """
+    Input0 = Input(shape=input_shape)
+    Up = UpSampling2D(size=(avg, 1))(Input0)
+    Avg = AveragePooling2D(pooling, padding='same', strides=(avg,1))(Up)
+    return keras.Model(Input0, Avg)
 
 def Divide_Recombine(o_channel, in_channel,lev=CST.lev(CST), reg=0.001):
     """
@@ -150,12 +164,15 @@ class Perturbate(Layer):
                                       trainable=True)
         super(Perturbate, self).build(input_shape)
 
-    def call(self, x):
-        print((x+self.kernel).shape)
+    def call0(self, x):
         return x+self.kernel
 
+    def call(self, x):
+        return x+self.kernel*x
+
     def compute_output_shape(self, input_shape):
-         return (input_shape[1],input_shape[2], input_shape[3])
+         return input_shape
+
 
 def Expander(lev):
     """

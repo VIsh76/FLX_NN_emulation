@@ -1,3 +1,6 @@
+Refactoring:
+Load_a_couple0 useless now that all files are in hdf5
+
 Unet AE copier :
 
 PB : some pics are skipped 
