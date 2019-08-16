@@ -35,7 +35,7 @@ def Convert_all_from(in_folder='Data', out_folder='Data', div=(5,5), in_and_out=
 				print(f_name)
 				header = list(x.keys())[6:] # 6 first var are [dims, X,Y,lat, lon, lev, time]
 
-				folder_name = f_name.split('/')[-2]
+				folder_name = f_name.split('.')[-2]
 				out_folder = os.path.join( out_folder0, folder_name)
 
 				if not os.path.isdir(out_folder):
@@ -68,7 +68,7 @@ def select(data, n0, p0, n1,p1, lev):
     return(v.T)
 
 
-def from_net_to_pd(x, n_beg, p_beg, n_end, p_end,  header, lev,	j, use_fraction=False):
+def from_net_to_pd(x, n_beg, p_beg, n_end, p_end,  header, lev,	use_fraction=False):
     """
     Convert a part of an netCDF4 file into a hdf5
 	use_fraction = False, means variables containing 'FR' (such as frland) are dropped to save memory
@@ -91,10 +91,7 @@ def from_net_to_pd(x, n_beg, p_beg, n_end, p_end,  header, lev,	j, use_fraction=
     p0 = p_end - p_beg
     X = np.arange(n_beg,n_end); X = X.repeat(p0)
     Y = np.arange(p_beg,p_end); Y = np.tile(Y,n0)
-    if j:
-        C = np.array([ select_j(x[k], p_beg, n_beg, p_end, n_end,lev=lev) for k in VAR ])
-    else:
-        C = np.array([ select(x[k], p_beg, n_beg, p_end, n_end, lev=lev) for k in VAR ])
+    C = np.array([ select(x[k], p_beg, n_beg, p_end, n_end, lev=lev) for k in VAR ])
     C=C.swapaxes(1,2) # keep the dimension in place when we reshape
     C = C.reshape(len(VAR)*len(LEV), -1).T
     index = pd.MultiIndex.from_product([VAR,LEV], names=['Var', 'level'])
@@ -111,18 +108,15 @@ def make_name_id(x,y):
         ys='0' + ys
     return _is+xs+_js+ys+ext
 
-def fully_convert_file(src, out, div, header, extension='.hdf5', name='coord', j=False):
+def fully_convert_file(src, out, div, header, extension='.hdf5', name='id'):
 	"""
 	Divide the file into div[0], div[1] parts and save them
 	j : jacobian file
 	"""
 	x = Dataset(src)
-	if j:
-		n,p,lev,_ = x['dflxdpl'].shape
-	else:
-		n = x['Xdim'].shape[0]
-		p   = x['Ydim'].shape[0]
-		lev = x['lev'].shape[0]
+	n = x['Xdim'].shape[0]
+	p   = x['Ydim'].shape[0]
+	lev = x['lev'].shape[0]
 
 	n_step = int(n/div[0])
 	p_step = int(p/div[1])
@@ -136,7 +130,7 @@ def fully_convert_file(src, out, div, header, extension='.hdf5', name='coord', j
 	for i in range(div[0]):
 		for j in range(div[1]):
 			print(i,j)
-			dataf = from_net_to_pd(x, n0,p0,n1, p1,header, lev=lev,j=j)
+			dataf = from_net_to_pd(x, n0,p0,n1, p1,header, lev=lev)
 			if name=='id':
 				id_n = make_name_id(n1+1,p1+1)
 				fullname = out_name+make_name_id(n0+1,p0+1)+extension
