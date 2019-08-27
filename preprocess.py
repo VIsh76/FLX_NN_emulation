@@ -66,7 +66,6 @@ class SetToZero(Preprocess):
         x[:,id_var_used]*=0
         return(x)
 
-
 class Normalizer(Preprocess):
     """
     Transform the input into a variable of mean 0 and norm 1
@@ -101,6 +100,47 @@ class Normalizer(Preprocess):
     def prod_vec(self, lev):
         return(np.ones(lev)/self.std)
 
+    def __str__(self):
+        return super().__str__().format("Normalizer", self.fitted, (self.m, self.std))
+
+class Positive_Normalizer(Preprocess):
+    """
+    Transform the input into a variable of mean 0 and norm 1
+    Then set the minimum to 0 for Jacobian
+    """
+    def __init__(self):
+        super().__init__()
+        self.m = (0,0) # mean and min
+        self.std = 1
+
+    def __call__(self, x, headers=None):
+        x -= self.m[0]
+        x /= self.std
+        x -= self.m[1]
+        return x
+
+    def fit(self, x):
+        self.fitted=True
+        self.m = (np.mean(x), np.min( x - np.mean(x) )/np.std(x) )
+        self.std = np.std(x)
+
+    @property
+    def params(self):
+        return self.m, self.std
+
+    def set_params(self, cst, std):
+        """
+        CST is a tuple (mean, min)
+        """
+        self.fitted=True
+        self.m = cst
+        self.std = std
+
+    def sub_vec(self, lev):
+        return(np.zeros(lev)+self.m)
+
+    def prod_vec(self, lev):
+        return(np.ones(lev)/self.std)
 
     def __str__(self):
         return super().__str__().format("Normalizer", self.fitted, (self.m, self.std))
@@ -261,7 +301,6 @@ class DictPrepross(Preprocess):
                 self[k].fit(x0)
         else:
             assert(False)
-
 
     @property
     def new_vars(self):

@@ -2,7 +2,7 @@ import keras
 from keras.models import Sequential
 from keras.layers import Dense, LSTM, Activation, Flatten, Input, TimeDistributed, Concatenate
 from keras.layers import Conv1D, UpSampling1D, AveragePooling1D, SeparableConv1D
-from keras.layers import Conv2D, UpSampling2D, AveragePooling2D
+from keras.layers import Conv2D, UpSampling2D, AveragePooling2D, SeparableConv2D
 from keras.layers import Bidirectional, Lambda, Reshape
 from keras.losses import mean_squared_error
 from keras import backend as K
@@ -16,6 +16,29 @@ from contextlib import redirect_stdout
 from CST import CST
 
 # Simples architecture are saved
+def Sep_Conv2D(list_of_kernel_s, list_of_filters, list_of_activations, params, in_channel, lev=CST.lev(CST),
+               reg=0.0001, data_format='channels_first'):
+    """
+    all list argument must be of length 3, each sublist of the same size as list_of_kernels' sublists
+    list_xx : parameters for the sep-convolutions
+    kernels : kernel size
+    filters : number of filters
+    activations : activation function names for Activation_Generator()
+    params : parameters for activation function
+    (in_channel, lev) : shape of input
+    reg : regularizers weights for every layer
+    """
+    Input0 = Input(shape=(in_channel,lev,lev), name=Name('Input',0), dtype='float32')
+    AG = Activation_Generator()
+    Conv1=[Input0]
+    for i in range(len(list_of_filters)):
+        Conv1.append(SeparableConv2D(filters = list_of_filters[i], kernel_size= list_of_kernel_s[i], \
+                        padding='same', name=Name("Conv_u",i+1), use_bias=True,
+                                     kernel_regularizer=regularizers.l2(reg),
+                                    data_format=data_format)(Conv1[-1]))
+        Conv1.append( AG(list_of_activations[i], Name(list_of_activations[i]+'_u', i+1), params )(Conv1[-1]) )
+    return keras.Model(Input0, Conv1[-1])
+
 
 def Upsampler(avg, pooling, input_shape, data_format='channels_last'):
     """
@@ -31,7 +54,7 @@ def Upsampler(avg, pooling, input_shape, data_format='channels_last'):
                                     data_format=data_format)(Up)
     return keras.Model(Input0, Avg)
 
-def Upsampler2D(avg, pooling, input_shape):
+def Upsampler2D(avg, pooling, input_shape, data_format='channels_fist'):
     """
     Generate a Upsampler model, perform a
     avg : size of upsampling
@@ -40,8 +63,9 @@ def Upsampler2D(avg, pooling, input_shape):
     adverage is perform on avg/pooling terms
     """
     Input0 = Input(shape=input_shape)
-    Up = UpSampling2D(size=(avg, 1))(Input0)
-    Avg = AveragePooling2D(pooling, padding='same', strides=(avg,1))(Up)
+    Up = UpSampling2D(size=(avg, 1), data_format=data_format)(Input0)
+    Avg = AveragePooling2D(pooling, padding='same',
+                            data_format=data_format, strides=(avg,1))(Up)
     return keras.Model(Input0, Avg)
 
 def Divide_Recombine(o_channel, in_channel,lev=CST.lev(CST), reg=0.001):

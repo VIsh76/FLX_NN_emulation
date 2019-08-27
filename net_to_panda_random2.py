@@ -67,69 +67,94 @@ def Convert_random_all_from(Xdim, Ydim, in_folder, out_folder0, div=5, noutput=2
                 Xf.to_hdf(name_in, key='s')
                 Yf.to_hdf(name_out, key='s')
     return(Xf,Yf)
+import pandas as pd
+import numpy as np
+import os
+import tables
 
-def select_rng(data, rd_n, rd_p, lev):
+
+def Shuffle_all_jac_from(Xdim, Ydim, in_folder, out_folder0, div2d, n_output):
     """
-    Select elements in data
+    Convert all files in in_folder to hdf5, divide them into div and save them in out_folder
+    each generated folder correspond to one file.
+    use_selection = 0 : the entire file is converted (warning files are heavy)
+    use_selection > 0 : 'use_selection' files are selected randomly from each dataset
+    Xdim : dimension of a division
+    Ydim : dimension of a division
+    in_folder : folder containing input and output
     """
-    s = len(data.shape)
-    print(data.shape)
-    print(np.max(rd_n))
-    print(np.max(rd_p))
-    print(s)
-    if(s==4):
-        v = data[0,: ,rd_n, rd_p]
-    elif(s==3):
-        v = data[: ,rd_n, rd_p].repeat(lev,axis=0)
-    else:
-        print("Variable require to have at least 3 dim and at most 4")
-        assert(False)
-    v=v.reshape(lev,-1)
-    return(v.T)
+    data_folder = in_folder
+    lst_files_in = os.listdir(os.path.join(data_folder, 'Input'))
+    lst_files_ou = os.listdir(os.path.join(data_folder, 'Output'))
 
-def from_net_to_pd_rng(x, ids_n, ids_p, header, lev):
-    """
-    Convert parts of
-    """
-    VAR = header
-    LEV = np.arange(lev)
-    n0 = len(ids_n)
-    p0 = len(ids_p)
+    lst_files_in.sort()
+    lst_files_ou.sort()
 
-    X = ids_n; X = X.repeat(p0)
-    Y = ids_p; Y = np.tile(Y,n0)
-    C = np.array([ select_rng(x[k], ids_p, ids_n, lev=lev) for k in VAR ])
+    lpynb = []
+    if '.'==lst_files_in[0][0]:
+        del(lst_files_in[0])
+    if '.'==lst_files_ou[0][0]:
+        del(lst_files_ou[0])
 
-    C=C.swapaxes(1,2) # keep the dimension in place when we reshape
-    C = C.reshape(len(VAR)*len(LEV), -1).T
-    index = pd.MultiIndex.from_product([VAR,LEV], names=['Var', 'level'])
-    return(pd.DataFrame(data=C, index=[X,Y], columns=index))
+    N = '20190401_0000z'#lst_files_in[0].split('.')[-2] # NEED TO BE CHANGED
+    out_folder = os.path.join(out_folder0, N)
 
-def fully_random_convert_file(src, out, div, n_ids_list, p_ids_list, header,  extension='.hdf5'):
-	"""
-	Takes random elements from the file
-	# random_ids is a list of rd_n, rd_p, random elements to select
-	"""
-	x = Dataset(src)
-	n = x['Xdim'].shape[0]
-	p   = x['Ydim'].shape[0]
-	lev = x['lev'].shape[0]
+    ids_n = np.arange(Xdim*div2d[0]); np.random.shuffle(ids_n)
+    ids_p = np.arange(Ydim*div2d[1]); np.random.shuffle(ids_p)
 
-	n_step = int(n/div)
-	p_step = int(p/div)
-	n0 = 0
-	p0 = 0
-	n1 = n_step
-	p1 = p_step
+    if not os.path.isdir(out_folder):
+        print('Creating out_folder', out_folder)
+        os.mkdir(out_folder0)
+        os.mkdir(out_folder)
+        os.mkdir(os.path.join(out_folder, 'Output'))
+        os.mkdir(os.path.join(out_folder, 'Input'))
+    ndiv = Xdim
+    pdiv = Ydim
+    noutput = min(n_output, div2d[0]*div2d[1])
+    No = 'jac'
+    Ni = 'input'
+#    print(ids_n)
+#    print(ids_p)
+    for i in range(div2d[0]):
+        for j in range(div2d[1]):
+            c_id = i*div2d[1]+j
+            if(c_id)<noutput:
+                name_out, extension = os.path.splitext(No+'_'+str(c_id))
+                name_in, extension = os.path.splitext(Ni+'_'+str(c_id))
 
-	out_name = os.path.splitext(out)[0]
-	for k in range(div):
-		i = n_ids_list[n0:n1]
-		j = p_ids_list[p0:p1]
-		print(np.max(i), np.max(j))
-		dataf = from_net_to_pd_rng(x, i, j, header, lev=lev)
-		dataf.to_hdf(out_name + '_' + str(k) + extension, key='s')
-		n0 += n_step
-		p0 += p_step
-		n1 += n_step
-		p1 += p_step
+                name_out = os.path.join(out_folder, 'Output', name_out+'.npy')
+                name_in = os.path.join(out_folder, 'Input', name_in+'.hdf5')
+                print(name_in, name_out)
+
+                c_ids_n = ids_n[i*Xdim:(i+1)*Xdim]
+                c_ids_p = ids_p[j*Ydim:(j+1)*Ydim]
+
+                build = False
+                for l in range(div2d[0]):
+                    for k in range(div2d[1]):
+                        used_n_ids = c_ids_n[np.where(np.logical_and(l*ndiv <= c_ids_n, c_ids_n < (l+1)*ndiv ))]
+                        used_p_ids = c_ids_p[np.where(np.logical_and(k*pdiv <= c_ids_p, c_ids_p < (k+1)*pdiv ))]
+                        X =  pd.read_hdf(os.path.join(in_folder, 'Input', lst_files_in[l*div2d[1]+k]))
+                        Y =  np.load((os.path.join(in_folder, 'Output', lst_files_ou[l*div2d[1]+k])))
+                        if(len(used_n_ids)*len(used_p_ids)>0):
+                            used_n_ids = used_n_ids%ndiv
+                            used_p_ids = used_p_ids%pdiv
+                            ID_flatten = np.dot(used_p_ids.reshape(-1,1), used_n_ids.reshape(1,-1)).flatten()
+                            X = X.iloc[ID_flatten,  :]
+                            Y = Y[:, :, :, ID_flatten]
+                            if(build):
+                                Xf = Xf.append(X)
+                                Yf = np.concatenate([Yf,Y], axis=-1)
+                            else:
+                                build=True
+                                Xf = X.copy()
+                                Yf = Y.copy()
+                Xf.to_hdf(name_in, key='s')
+                print(Yf.shape)
+                Yf=np.save(name_out, np.array(Yf))
+    return(Xf,Yf)
+
+#f522_dh.trainingdata_in.lcv.20190401_0000z_is0001_js0001.hdf5
+#Xdim=60
+#Ydim=60
+#Shuffle_all_jac_from(Xdim, Ydim, 'DataJac/Training/20190401_0000z/', 'DataJac/Shuffle', div2d=(12,72), n_output=1)

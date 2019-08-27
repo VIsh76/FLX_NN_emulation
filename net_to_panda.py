@@ -35,7 +35,7 @@ def Convert_all_from(in_folder='Data', out_folder='Data', div=(5,5), in_and_out=
 				print(f_name)
 				header = list(x.keys())[6:] # 6 first var are [dims, X,Y,lat, lon, lev, time]
 
-				folder_name = f_name.split('/')[-2]
+				folder_name = f_name.split('.')[-2]
 				out_folder = os.path.join( out_folder0, folder_name)
 
 				if not os.path.isdir(out_folder):
