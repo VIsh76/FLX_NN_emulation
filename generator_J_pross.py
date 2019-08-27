@@ -96,7 +96,6 @@ class Basic_Generator_prep(keras.utils.Sequence):
         is used once at initialisation
         """
         x, _ = self._load_a_couple0(self.load_a_path_origin(0,0))
-
         self._div = int(len(os.listdir(os.path.join(self.List_of_dir[0],'Input'))))
         self.variables = list(x.columns.levels[0])
         self.used_variables = list(x.columns.levels[0])
@@ -113,7 +112,6 @@ class Basic_Generator_prep(keras.utils.Sequence):
         """
         Reset the index to zero (call after epoch_end if the current file and folder are the last ones)
         """
-
         self.idx_folder = self.all_files_idx//self._div
         self.idx_file = self.all_files_idx % self._div
         self.current_folder = self.idx_folder[0]
@@ -370,8 +368,9 @@ class Preprocessed_Generator(Basic_Generator_prep):
         Load x and y files given by the two values of path
         """
         X,Y = super(Preprocessed_Generator, self).load_a_couple(path)
+        Y = np.rollaxis(Y,-1) #6,72,72,BS
         X = self.apply_preprocess_x(X)
-        # = self.apply_preprocess_y(Y)
+        Y = self.apply_preprocess_y(Y)
         return X,Y
 
     def __getitem__(self, index):
@@ -393,12 +392,7 @@ class Preprocessed_Generator(Basic_Generator_prep):
         """
         self.reload(folder_id, file_id)
         X = self.X[el_ids]
-        Y = self.apply_preprocess_y(self.Y[:,:,:,el_ids])
-#        del(self.Y)
-        Y = np.rollaxis(Y,-1) #6,72,72,BS
-        Y = Y.swapaxes(-2,-1)
-#        X=X.swapaxes(1,2)
-#        Stucture is channel first
+        Y = self.Y[el_ids]
         return X,Y
 
 ######## Differenciate Y and take only differences in flx as the output
@@ -408,7 +402,7 @@ class Diff_Generator(Preprocessed_Generator):
     """
     def __init__(self, folder, tmp_folder='TmpFolder', batch_size=64, shuffle=True, \
                  custom_b_p_e = 0, preprocess_x=[],preprocess_y=[]):
-        super(Diff_Generator, self).__init__(folder, tmp_folder, batch_size, shuffle, custom_b_p_e, preprocess_x)
+        super(Diff_Generator, self).__init__(folder, tmp_folder, batch_size, shuffle, custom_b_p_e, preprocess_x, preprocess_y)
 
     def apply_preprocess_x(self,X):
         """
@@ -423,17 +417,79 @@ class Diff_Generator(Preprocessed_Generator):
         Apply all the preprocess in the output data
         """
         Y = super(Diff_Generator, self).apply_preprocess_y(Y)
-        Y[:,1:,1:,:] = Y[:,1:,1:,:] - Y[:,1:,:-1,:] # 0 correspond to the upper layer and is always 0
+        Y[:,:,1:,1:] = Y[:,:,1:,1:] - Y[:,:,1:,:-1] # 0 correspond to the upper layer and is always 0
         return Y
 
-####### AE :
-class AE_Generator(Diff_Generator):
+###### ONLY LOW LEVELS :
+class LowLev(Preprocessed_Generator):
     """
     Generate the cumulative FLX, and the bias at level 0
     """
     def __init__(self, folder, tmp_folder='TmpFolder', batch_size=64, shuffle=True, \
-                 custom_b_p_e = 0, preprocess_x=[],preprocess_y=[]):
-        super(AE_Generator, self).__init__(folder, tmp_folder, batch_size, shuffle, custom_b_p_e, preprocess_x)
+                 custom_b_p_e = 0, preprocess_x=[],preprocess_y=[], cut = 36):
+        self.cut =36
+        super(LowLev, self).__init__(folder, tmp_folder, batch_size, shuffle, custom_b_p_e, preprocess_x, preprocess_y)
+
+    def apply_preprocess_x(self,X):
+        """
+        Apply all the preprocess in the input data
+        """
+        X = super(LowLev, self).apply_preprocess_x(X)
+        return X
+
+    def apply_preprocess_y(self,Y):
+        """
+        Apply all the preprocess in the output data
+        """
+        Y = super(LowLev, self).apply_preprocess_y(Y)
+#        Y[:,:,1:,1:] = Y[:,:,1:,1:] - Y[:,:,1:,:-1] # 0 correspond to the upper layer and is always 0
+        Y = Y[:, :, self.cut:, self.cut:]
+        return Y
+
+class LowLevX(LowLev):
+    """
+    Generate data only for lower levels (X and Y)
+    """
+    def __init__(self, folder, tmp_folder='TmpFolder', batch_size=64, shuffle=True, \
+                 custom_b_p_e = 0, preprocess_x=[],preprocess_y=[], cut=36):
+        super(LowLevX, self).__init__(folder, tmp_folder, batch_size, shuffle, custom_b_p_e, preprocess_x, preprocess_y, cut=cut)
+
+    def apply_preprocess_x(self,X):
+        """
+        Apply all the preprocess in the input data
+        """
+        X = super(LowLevX, self).apply_preprocess_x(X)
+        X = X[:,:,self.cut:]
+        return X
+
+class ColumGenerator(Preprocessed_Generator):
+    """docstring for ColumGenerator."""
+    def __init__(self, folder, tmp_folder='TmpFolder', batch_size=64, shuffle=True, \
+                 custom_b_p_e = 0, preprocess_x=[],preprocess_y=[], cut=36):
+        self.cut=cut
+        super(ColumGenerator, self).__init__(folder, tmp_folder, batch_size, shuffle, custom_b_p_e, preprocess_x, preprocess_y)
+
+
+    def _reconfigure_outputs(self):
+        super(ColumGenerator, self)._reconfigure_outputs()
+        self.used_variables.append('Pert')
+
+    def apply_preprocess_x(self,X):
+        """
+        Apply all the preprocess in the input data
+        """
+        X = super(ColumGenerator, self).apply_preprocess_x(X)
+        X = X[:,:,self.cut:]
+        return X
+
+    def apply_preprocess_y(self,Y):
+        """
+        Apply all the preprocess in the output data
+        """
+        Y = super(ColumGenerator, self).apply_preprocess_y(Y) # shape : (bs, nvar, lev, lev)
+        Y[:,:,1:,1:] = Y[:,:,1:,1:] - Y[:,:,1:,:-1] # 0 correspond to the upper layer and is always 0
+        Y = Y[:, :, (self.cut-1):, self.cut:]
+        return Y
 
     def __getitem__(self, index):
         """
@@ -453,9 +509,18 @@ class AE_Generator(Diff_Generator):
         Generates data containing batch_size samples, called at the end of __getitem__
         """
         self.reload(folder_id, file_id)
-        X = []
-        Y = self.apply_preprocess_y(self.Y[:,:,:,el_ids])
-#        del(self.Y)
-        Y = np.rollaxis(Y,-1) #6,72,72,BS
-        Y = Y.swapaxes(-2,-1)
-        return Y,Y
+        # X
+        X = self.X[el_ids]
+        Pert = np.zeros((X.shape[0], 1, X.shape[2]))
+        X = np.concatenate([X, Pert], axis=1)
+        X = np.repeat(X, self.cut+1, axis=0)
+        for p_lev in range(1 ,1+self.cut):
+            for batch in range(self.batch_size):
+                X[batch*self.cut+p_lev, -1, -p_lev]=1
+        # Y
+        Y = self.Y[el_ids].copy()
+        Y[:, :, 0, :] = 0 #last element is 0, no perturbation
+        Y = np.moveaxis(Y,[0,1,2,3],[-2,0,-1,1]); print(Y.shape)
+        Y = Y.reshape(Y.shape[0], Y.shape[1], -1); print(Y.shape)
+        Y = np.moveaxis(Y,-1,0)
+        return X,Y

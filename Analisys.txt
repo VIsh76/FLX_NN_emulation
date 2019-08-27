@@ -1,6 +1,9 @@
 Refactoring:
 Load_a_couple0 useless now that all files are in hdf5
 
+CHANGE NP.ROLLAXIS in BaseGenerator to eliminate redonant fct in Preprocess
+
+
 Unet AE copier :
 
 PB : some pics are skipped 
