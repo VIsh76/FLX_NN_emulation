@@ -92,6 +92,10 @@ class Basic_Generator_J(keras.utils.Sequence):
         self.Ydim = len(x.index.levels[1])
         self.X_x_Y = len(x.index)
         self.lev = len(x.columns.levels[1])
+        self.all_files_idx = np.arange(self._div*self._nb_dir)
+        if self.shuffle>1:
+            np.random.shuffle(self.all_files_idx)
+
 
     def reset(self):
         """
@@ -100,7 +104,7 @@ class Basic_Generator_J(keras.utils.Sequence):
         self.all_files_idx = np.arange(self._div*self._nb_dir)
 
         if self.shuffle>1:
-            np.random.shuffle(all_files_idx)
+            np.random.shuffle(self.all_files_idx)
 
         self.idx_folder = self.all_files_idx//self._div
         self.idx_file = self.all_files_idx % self._div
@@ -240,13 +244,13 @@ class Preprocessed_Generator(Basic_Generator_J):
     """
     Child of Basic_Generator allows a preprocess of the data
     """
-    def __init__(self, folder=data_folder, batch_size=64, shuffle=True, \
+    def __init__(self, folder, batch_size=64, shuffle=True, \
                  custom_b_p_e = 0, preprocess_x=[],preprocess_y=[]):
         """
         preprocess_x : list of Preprocess class to apply to input
         preprocess_y : list of Preprocess class to apply to output
         """
-        super(Preprocessed_Generator, self).__init__(folder, batch_size, shuffle, custom_b_p_e)
+        super(Preprocessed_Generator, self).__init__(folder,  batch_size, shuffle, custom_b_p_e)
         self.preprocess_x = preprocess_x
         self.preprocess_y = preprocess_y
         self.reconfigured = False
@@ -295,354 +299,86 @@ class Preprocessed_Generator(Basic_Generator_J):
         """
         Load x and y files given by the two values of path
         """
-        X,Y = pd.read_hdf(path[0], key='s'), np.load(path[1], key='s')
+        X,Y = super(Preprocessed_Generator, self).load_a_couple(path)
         X = self.apply_preprocess_x(X)
-        Y = self.apply_preprocess_y(Y)
         return X,Y
 
     def __getitem__(self, index):
-        'Generate one batch of data'
+        """
+        Generate one batch of data
+        """
         # Generate indexes of the batch
         folder_id, file_id, el_id  = self.index_to_ids(index)
-        # use the shuffled indices
         folder_id = self.idx_folder[folder_id]
         file_id = self.idx_file[file_id]
         el_ids = self.idx_el[el_id*self.batch_size + np.arange(self.batch_size)]
-        return( self.__data_generation(folder_id, file_id, el_ids))
+        self.current_b = el_ids
+        return self.__data_generation(folder_id, file_id, el_ids)
 
     def __data_generation(self, folder_id, file_id, el_ids):
-        'Generates data containing batch_size samples'
+        """
+        Generates data containing batch_size samples, called at the end of __getitem__
+        """
         self.reload(folder_id, file_id)
         X = self.X[el_ids]
-        Y = self.Y[el_ids]
-        X=X.swapaxes(1,2)
+        Y = self.apply_preprocess_y(self.Y[:,:,:,el_ids])
+        Y = np.rollaxis(Y,-1) #6,72,72,BS
+        Y = Y.swapaxes(-2,-1)
         return X,Y
 
 ######## Differenciate Y and take only differences in flx as the output
-class FLX_Cumulative_Generator(Preprocessed_Generator):
+class Diff_Generator(Preprocessed_Generator):
     """
     Generate the cumulative FLX, and the bias at level 0
     """
-    def __init__(self, folder=data_folder, batch_size=64, shuffle=True, \
-                 custom_b_p_e = 0, preprocess_x=[]):
-        super(FLX_Cumulative_Generator, self).__init__(folder,  batch_size, shuffle, custom_b_p_e, \
-                                                    preprocess_x=preprocess_x)
+    def __init__(self, folder,  batch_size=64, shuffle=True, \
+                 custom_b_p_e = 0, preprocess_x=[],preprocess_y=[]):
+        super(Diff_Generator, self).__init__(folder,  batch_size, shuffle, custom_b_p_e, preprocess_x)
 
-    def apply_preprocess_y(self,Y):
+    def apply_preprocess_x(self,X):
         """
-        Produce the cumulative element where the bias (highest layer) is substract
+        Apply all the preprocess in the input data
         """
-        Y= super(FLX_Cumulative_Generator, self).apply_preprocess_y(Y)
-        idflx = np.array( [ self.variables_pred.index(name) for name in ['flxu', 'flxd']])
-        Y = Y[:, idflx]
-        Y0 = (Y[:,1, [0]] - Y[:,0, [0]])
-        Y = (Y[:,1, 1:] - Y[:,0, 1:]) - Y0 # store FLX, onyl the 72 lowest, the more important
-        if(Y.shape[-1]==1):
-            Y = Y.reshape(Y.shape[0],Y.shape[1])
-        return np.concatenate([Y0, Y], axis=-1)
-
-###########################
-class FLX_Diff_Bias_Generator(Preprocessed_Generator):
-    """
-    Generate delta FLX, and the bias at level 0
-    """
-    def __init__(self, folder=data_folder,  batch_size=64, shuffle=True, \
-                 custom_b_p_e = 0, preprocess_x=[]):
-        super(FLX_Diff_Bias_Generator, self).__init__(folder,  batch_size, shuffle, custom_b_p_e, \
-                                                    preprocess_x=preprocess_x)
-
-    def apply_preprocess_y(self,Y):
-        """
-        Produce the cumulative element where the bias (highest layer) is substract
-        """
-        Y= super(FLX_Diff_Bias_Generator, self).apply_preprocess_y(Y)
-        idflx = np.array( [ self.variables_pred.index(name) for name in ['flxu', 'flxd']])
-        Y = Y[:, idflx]
-        Y0 = (Y[:,0, [0]] - Y[:,1, [0]])
-        Y = (Y[:,1, :] - Y[:,0, :]) # store FLX, onyl the 72 lowest, the more important
-        Y = Y[:, 1:] - Y[:, :-1]
-        if(Y.shape[-1]==1):
-            Y = Y.reshape(Y.shape[0],Y.shape[1])
-        return np.concatenate([-Y0, -Y], axis=-1)
-
-###########################
-
-class Full_Diff_Generator(Preprocessed_Generator):
-    def __init__(self, folder=data_folder,  batch_size=64, shuffle=True, \
-                 custom_b_p_e = 0, preprocess_x=[],  chosen_var = ['flxd','flxu','dfdts','flx']):
-        self.new_variables_pred = chosen_var.copy()
-        super(Full_Diff_Generator, self).__init__(folder,  batch_size, shuffle, custom_b_p_e, \
-                                                    preprocess_x=preprocess_x, preprocess_y=[])
-
-    def apply_preprocess_y(self,Y):
-        Y = np.array(Y).reshape(self.X_x_Y, len(self.variables_pred), self.lev+1)
-        idflx = np.array( [ self.variables_pred.index(name) for name in self.new_variables_pred])
-        Y = Y[:, idflx, 1:] - Y[:, idflx, :-1]
-        Y = Y.swapaxes(1,2)
-        return Y
-
-######## AE :
-class AE_Generator(Full_Diff_Generator):
-    """
-    Generate data for an AE
-    """
-    def __init__(self, folder=data_folder,  batch_size=64, shuffle=True, \
-                 custom_b_p_e = 0, preprocess_x=[],  chosen_var = ['flxd','flxu'], stash_x=True):
-        self.stash_x = stash_x # conserve input x variables or not
-        super(AE_Generator, self).__init__(folder,  batch_size, shuffle, custom_b_p_e, \
-                                                    preprocess_x=preprocess_x, chosen_var=chosen_var)
-
-    def __getitem__(self, index):
-        X,Y = super(AE_Generator, self).__getitem__(index)
-        if self.stash_x:
-            X = Y.copy()
-        else:
-            X = np.concatenate((X,Y),axis=-1)
-        if(Y.shape[-1]==1):
-            Y=Y.reshape(Y.shape[0],Y.shape[1])
-        return X,Y
-
-
-class FLX_AE_Generator(Full_Diff_Generator):
-    """
-    Has flxu, flxd as input and flx as output, work as an AE
-    """
-    def __init__(self, folder=data_folder,  batch_size=64, shuffle=True, \
-                 custom_b_p_e = 0, preprocess_x=[],  chosen_var = ['flxd','flxu']):
-        super(FLX_AE_Generator, self).__init__(folder,  batch_size, shuffle, custom_b_p_e, \
-                                                    preprocess_x=[], chosen_var=chosen_var)
-
-    def change_y(self,Y):
-        """
-        Get FLX (the output into Y0)
-        """
-        Y0 = -Y[:,:,0] + Y[:,:,1]
-        if(Y0.shape[-1]==1):
-            Y0 = Y0.reshape(Y0.shape[0],Y0.shape[1])
-        return Y,Y0
-
-    def __getitem__(self, index):
-        X,Y = super(FLX_AE_Generator, self).__getitem__(index)
-        X,Y = self.change_y(Y)
-        return X,Y
-
-class FLX_Generator(Full_Diff_Generator):
-    def __init__(self, folder=data_folder,  batch_size=64, shuffle=True, \
-                 custom_b_p_e = 0, preprocess_x=[], chosen_var=['flxu', 'flxd']):
-        super(FLX_Generator, self).__init__(folder,  batch_size, shuffle, custom_b_p_e, \
-                                                    preprocess_x=preprocess_x, chosen_var=['flxu', 'flxd'])
-
-    def apply_preprocess_y(self,Y):
-        Y= super(FLX_Generator,self).apply_preprocess_y(Y)
-        Y = -Y[:,:,0] + Y[:,:,1]
-        if(Y.shape[-1]==1):
-            Y = Y.reshape(Y.shape[0],Y.shape[1])
-        return Y
-
-#### CloudyGenerator
-class CloudyGenerator(FLX_Generator):
-    """
-    Can generate data with no cloud. Suffle is set to 1 to take the right number of element in each subset
-    """
-    def __init__(self, folder=data_folder,  batch_size=64, \
-                 custom_b_p_e = 0, preprocess_x=[], no_cloudi=True, no_cloudl=True,  chosen_var = ['flxd','flxu','dfdts','flx']):
-        self.no_cloudi = no_cloudi
-        self.no_cloudl = no_cloudl
-        self._is_cloud_init = False
-        super(CloudyGenerator, self).__init__(folder,  batch_size, shuffle=1, custom_b_p_e=custom_b_p_e, \
-                                                    chosen_var=chosen_var, preprocess_x=preprocess_x)
-        len(self)
-        self._is_cloud_init = True
-
-    def apply_preprocess_x(self, X):
-        X = super(CloudyGenerator,self).apply_preprocess_x(X)
-        id_el = np.ones(X.shape[0]).astype(bool)
-
-        if self.no_cloudl:
-            id_el = id_el * (np.max(X[:, self.ql_id, :], axis=1)==0).astype(bool)
-        if self.no_cloudi:
-            id_el = id_el * (np.max(X[:, self.qi_id, :], axis=1)==0).astype(bool)
-        X = X[id_el]
-
-        if self.no_cloudi*self.no_cloudl:
-            X = np.delete(X, [self.qi_id, self.ql_id], axis=1)
-        elif self.no_cloudi:
-            X = np.delete(X, [self.qi_id], axis=1)
-        elif self.no_cloudl:
-            X = np.delete(X, [self.ql_id], axis=1)
-
-        self.id_cloud = id_el.copy()
+        X = super(Diff_Generator, self).apply_preprocess_x(X)
+#        X = X[:,:,1:]
         return X
 
-    def apply_preprocess_y(self, Y):
-        Y = super(CloudyGenerator, self).apply_preprocess_y(Y)
-        Y = Y[self.id_cloud]
-        return(Y)
-
-    def _reconfigure_outputs(self):
-        super(CloudyGenerator, self)._reconfigure_outputs()
-
-        self.qi_id = self.used_variables.index('qi')
-        self.ql_id = self.used_variables.index('ql')
-
-        if self.no_cloudl:
-            a = self.used_variables.index('ql')
-            del(self.used_variables[a])
-        if self.no_cloudi:
-            a = self.used_variables.index('qi')
-            del(self.used_variables[a])
-
-    def on_epoch_end(self):
-        super(CloudyGenerator, self).on_epoch_end()
-        if self._is_cloud_init:
-            self.idx_el = np.arange(self.batch_size*self.n_per_file[self.current_folder*self._div + self.current_file])
-
-    def index_to_ids(self,index):
-        index0 = index
-        file=0
-        while index0 >= self.n_per_file[file]:
-            index0-=self.n_per_file[file]
-            file+=1
-        folder_id = file // self._div
-        file_id = file % self._div
-        el_id = index0
-        self.reload(folder_id, file_id)
-        return folder_id, file_id, el_id
-
-    def reload(self, folder_id, file_id):
-        if folder_id != self.current_folder or file_id != self.current_file:
-            super(Full_Diff_Generator, self).reload(folder_id, file_id)
-            self.idx_el = np.arange(self.batch_size*self.n_per_file[folder_id*self._div + file_id])
-            if self.shuffle>0:
-                np.random.shuffle(self.idx_el)
-
-    def __getitem__(self, index):
-        X,Y = super(CloudyGenerator, self).__getitem__(index)
-        return X,Y
-
-    def __len__(self):
-        if(self.max_b==0):
-            self.n_per_file = np.arange(self.batch_per_file)
-            N = []
-            for i in range(len(self.List_of_dir)):
-                for j in range(self._div):
-                    self.reload(i,j)
-                    N.append(self.X.shape[0])
-            N = [n//self.batch_size for n in N]
-            self.n_per_file = N
-            self.max_b = np.sum(np.array(N))
-            self.reload(0,0)
-        return(self.max_b)
-
-
-class Up_and_Down_Generator(Full_Diff_Generator):
-    def __init__(self, folder=data_folder,  batch_size=64, shuffle=True, \
-                 custom_b_p_e = 0, preprocess_x=[]):
-        super(Up_and_Down_Generator, self).__init__(folder,  batch_size, shuffle, custom_b_p_e, \
-                                                    preprocess_x=preprocess_x, chosen_var= ['flxd','flxu','dfdts'])
-
-###### PIC GENERATORS
-def Regu_flx(y, M):
-    y_bin = (y>M)
-    y_pic = y_bin*y
-    y_avg = (1-y_bin)*y + (y_bin)*np.mean(y, axis=1).reshape(-1,1)
-
-    y_bin = np.expand_dims(y_bin, axis=2)
-    y_avg = np.expand_dims(y_avg, axis=2)
-    y_pic = np.expand_dims(y_pic, axis=2)
-    return(y_bin, y_pic, y_avg)
-
-class Pic_Generator(CloudyGenerator):
-    """
-    Generate FLX, its pics,
-    """
-    def __init__(self, folder=data_folder,  batch_size=64, \
-                 custom_b_p_e = 0, preprocess_x=[], chosen_var = ['flxd','flxu'], threshold=50):
-        self.threshold = threshold
-        super(Pic_Generator, self).__init__(folder,  batch_size, custom_b_p_e=custom_b_p_e, \
-                                    chosen_var=chosen_var, preprocess_x=preprocess_x)
-
-    def apply_preprocess_y(self, Y):
-        Y = super(Pic_Generator, self).apply_preprocess_y(Y)
-        y_bin, y_pic, y_avg = Regu_flx(Y, self.threshold)
-        Y = Y.reshape(Y.shape[0], Y.shape[1], 1)
-        Y = np.concatenate( (Y,y_pic,y_avg,y_bin), axis=-1)
-        return(Y)
-
-    def _reconfigure_outputs(self):
-        super(Pic_Generator,self)._reconfigure_outputs()
-        self.true_variables_pred = ['flx', 'pics', 'avg', 'bin']
-
-class Has_Pic_Generator(Pic_Generator):
-    """
-    Generate FLX, its pics,
-    """
-    def __init__(self, folder=data_folder,  batch_size=64, \
-                 custom_b_p_e = 0, preprocess_x=[], chosen_var = ['flxd','flxu'], threshold=50):
-        self.threshold = threshold
-        super(Has_Pic_Generator, self).__init__(folder,  batch_size, custom_b_p_e=custom_b_p_e, \
-                                    chosen_var=chosen_var, preprocess_x=preprocess_x)
-
-    def apply_preprocess_y(self, Y):
-        Y = super(Has_Pic_Generator, self).apply_preprocess_y(Y)
-        Y = np.max(Y[:,:,-1], axis=1).reshape(Y.shape[0], 1)
-        return(Y)
-
-    def _reconfigure_outputs(self):
-        super(Has_Pic_Generator,self)._reconfigure_outputs()
-        self.true_variables_pred = ['bin']
-
-
-class Max_Pic_Generator(Pic_Generator):
-    """
-    Generate the max value of FLX,
-    """
-    def __init__(self, folder=data_folder,  batch_size=64, \
-                 custom_b_p_e = 0, preprocess_x=[], chosen_var = ['flxd','flxu'], threshold=50):
-        self.threshold = threshold
-        super(Max_Pic_Generator, self).__init__(folder,  batch_size, custom_b_p_e=custom_b_p_e, \
-                                    chosen_var=chosen_var, preprocess_x=preprocess_x)
-
-    def apply_preprocess_y(self, Y):
-        Y = super(Max_Pic_Generator, self).apply_preprocess_y(Y)
-        Y = np.max(Y[:,:,0], axis=1).reshape(Y.shape[0], 1)
-        return(Y)
-
-    def _reconfigure_outputs(self):
-        super(Max_Pic_Generator,self)._reconfigure_outputs()
-        self.true_variables_pred = ['M']
-
-########### FULLY CONNECTED GENERATORS
-class FC_Generator(Up_and_Down_Generator):
-    """
-    Return a flat vector for fully connection
-    """
-    def __init__(self, folder=data_folder,  batch_size=64, shuffle=True, \
-                 custom_b_p_e = 0, preprocess_x=[], unique_var=['pl', 'emis', 'ts']):
-        """
-        unique_var: keep only one value
-        """
-        super(FC_Generator, self).__init__(folder,  batch_size, shuffle, custom_b_p_e, preprocess_x=preprocess_x)
-        self.unique_var = unique_var
-        self._id_var_uni = [ self.used_variables.index(unique_var) for unique_var in self.unique_var ]
-        self._id_var_lev = [ self.used_variables.index(var) for var in self.used_variables if not var in self.unique_var ]
-
-    def __separate_uniques(self, X):
-        X_u = X[:, -1, self._id_var_uni]
-        X_l = X[:, :, self._id_var_lev]
-        return[X_l, X_u]
-
     def apply_preprocess_y(self,Y):
-        Y= super(FC_Generator,self).apply_preprocess_y(Y)
-        Y = Y.swapaxes(1,2)
-        Y = Y.reshape(Y.shape[0], -1)
+        """
+        Apply all the preprocess in the output data
+        """
+        Y = super(Diff_Generator, self).apply_preprocess_y(Y)
+        Y[:,1:,1:,:] = Y[:,1:,1:,:] - Y[:,1:,:-1,:] # 0 correspond to the upper layer and is always 0
         return Y
 
-    def __getitem__(self,index):
-        X,Y = super(FC_Generator, self).__getitem__(index)
-        return self.__separate_uniques(X), Y
+####### AE :
+class AE_Generator(Diff_Generator):
+    """
+    Generate the cumulative FLX, and the bias at level 0
+    """
+    def __init__(self, folder, tmp_folder='TmpFolder', batch_size=64, shuffle=True, \
+                 custom_b_p_e = 0, preprocess_x=[],preprocess_y=[]):
+        super(AE_Generator, self).__init__(folder, tmp_folder, batch_size, shuffle, custom_b_p_e, preprocess_x)
+
+    def __getitem__(self, index):
+        """
+        Generate one batch of data
+        """
+        # Generate indexes of the batch
+        folder_id, file_id, el_id  = self.index_to_ids(index)
+        folder_id = self.idx_folder[folder_id]
+        file_id = self.idx_file[file_id]
+        el_ids = self.idx_el[el_id*self.batch_size + np.arange(self.batch_size)]
+        self.current_b = el_ids
+        return self.__data_generation(folder_id, file_id, el_ids)
 
     def __data_generation(self, folder_id, file_id, el_ids):
-        'Generates data containing batch_size samples'
-        X,Y = super(FC_Generator, self).__data_generation(folder_id, file_id, el_ids)
-        return self.__separate_uniques(X), Y
+        """
+        Generates data containing batch_size samples, called at the end of __getitem__
+        """
+        self.reload(folder_id, file_id)
+        X = []
+        Y = self.apply_preprocess_y(self.Y[:,:,:,el_ids])
+        Y = np.rollaxis(Y,-1) #6,72,72,BS
+        Y = Y.swapaxes(-2,-1)
+        return Y,Y

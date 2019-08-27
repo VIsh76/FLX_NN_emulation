@@ -384,14 +384,15 @@ for j in range(5):
     fct.append(Normalizer())
 hd = ['rl', 'ri', 'ql', 'qi', 'q', 'ts', 't', 'emis', 'o3', 'pl']
 
-def Load_FLX_dict(header_dict = hd , path='DictPreprocess_fit.hdf5' , fct=fct):
+def Load_FLX_dict(header_dict = hd,  path='DictPreprocess_fit.hdf5' , fct=fct):
     if os.path.isfile(path):
         Dhd = pd.read_hdf(path, key='s')
         D = DictPrepross([], [])
         D.load_from_pd(Dhd)
     else:
+        assert('FALSE')
         print("Fitting Dict")
-        B = Basic_Generator(data_folder)
+        B = Basic_Generator(folder)
         xdim, ydim = B.Xdim, B.Ydim
         B = Basic_Generator(data_folder, batch_size=xdim*ydim, shuffle=False)
         D = DictPrepross(header_dict, fct)

@@ -91,7 +91,7 @@ class Basic_Generator(keras.utils.Sequence):
         self.all_files_idx = np.arange(self._div*self._nb_dir)
 
         if self.shuffle>1:
-            np.random.shuffle(all_files_idx)
+            np.random.shuffle(self.all_files_idx)
 
         self.idx_folder = self.all_files_idx//self._div
         self.idx_file = self.all_files_idx % self._div
