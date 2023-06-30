@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 import os
-import tables
+#import tables
 from netCDF4 import Dataset
 
 ### This file contains the function Convert_all_from which convert all netcf4 file into a
@@ -39,8 +39,8 @@ def Convert_all_from(in_folder='Data', out_folder='Data', div=(5,5), in_and_out=
 				out_folder = os.path.join( out_folder0, folder_name)
 
 				if not os.path.isdir(out_folder):
-				    print('Creating out_folder', out_folder)
-				    os.mkdir(out_folder)
+					print('Creating out_folder', out_folder)
+					os.mkdir(out_folder)
 
 				input_name  = os.path.join(data_folder,f_name)
 				output_name = os.path.join(out_folder, f_name)
@@ -232,11 +232,3 @@ def from_net_to_npy_j(x, header, lev):
             C2[:,:,:,i*C.shape[-1]+j] = C[:,:,:,i,j]
     return C2
 
-def select_j(data, lev):
-    """
-    Select elements in data
-    """
-    s = len(data.shape)
-    if(s==4):
-        v = data[:,:,n0:n1,p0:p1]
-    return(v.T)

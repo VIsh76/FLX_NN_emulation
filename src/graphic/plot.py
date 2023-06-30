@@ -7,21 +7,23 @@ def Plot(L):
     fig = plt.figure( figsize=(10, 8))
     alt = np.arange(73, 0, -1)
     ax1 = fig.add_subplot(121)
-    plt.plot(L[0,0],alt)
-    plt.plot(L[1,0],alt)
-    plt.title("flx")
+    ax1.plot(L[0,0],alt)
+    ax1.plot(L[1,0],alt)
+    ax1.set_title("flx")
 
     ax2 = fig.add_subplot(122)
-    plt.plot(L[0,1],alt)
-    plt.plot(L[1,1],alt)
-    plt.title("dfdts")
+    ax2.plot(L[0,1],alt)
+    ax2.plot(L[1,1],alt)
+    ax2.set_title("dfdts")
+    return fig
 
 def Plot_d(L):
     alt = np.arange(72, 0, -1)
-    fig = plt.figure( figsize=(10, 8))
-    plt.plot(L[0, 0, 1:] - L[0, 0, :72], alt)
-    plt.plot(L[1, 0, 1:] - L[1, 0, :72], alt)
-    plt.title('dflx')
+    fig, ax = plt.figure( figsize=(10, 8))
+    ax.plot(L[0, 0, 1:] - L[0, 0, :72], alt)
+    ax.plot(L[1, 0, 1:] - L[1, 0, :72], alt)
+    ax.title('dflx')
+    return fig
 
 #########################
 file1 = 'Data_net4/output0.txt'

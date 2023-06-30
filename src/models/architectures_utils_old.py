@@ -6,18 +6,12 @@ from keras.layers import LeakyReLU, Activation, ELU
 from keras.losses import mean_squared_error
 from keras import backend as K
 from keras import regularizers
-
 from contextlib import redirect_stdout
-from CST import CST
+
 
 # Various Utils fonction for architectures
 
-#Naming
-def Name(layer,i):
-    """
-    Set Name by combining layer name (string) and an id (int)
-    """
-    return layer+'_'+str(i)
+
 
 # Reshaping
 def reshape(y, n_shape):

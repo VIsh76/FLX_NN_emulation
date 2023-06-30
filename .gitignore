@@ -1,29 +1,39 @@
+# ALL DATA :
+Data/
 
-# Weights
+## Input, Output
+### hdf5 files
 *.h5
 *.hdf5
+### nc4 files
+*.nc4
+### npy
+*.npy
+
+## Models
+### Folders
 TrainedModels
 SavedModels
-# nc4 files
-*.nc4
+###Pickle
+*.pickle
+
 # Images
 *.png
 *.jpg
+*.gif
+
 # JSON
 *.json
-# Pickle
-*.pickle
-# npy
-*.npy
 
 #misc
 *.wav
+.DS_Store
+# Notebooks:
+*.ipynb
 
 # Python folder and files
 __pycache__
-BestModels
-TrainedModels_old_data
-Logs_old_data
-venv
+Data/
+.venv
 .idea
 .ipynb_checkpoints

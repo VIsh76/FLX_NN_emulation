@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 
+# USED PREPROCESSORS :
 
 class Preprocess(object):
     """
@@ -18,11 +19,20 @@ class Preprocess(object):
         return []
 
     def __call__(self, x, headers=None):
+        """X is size (None, lev)
+
+        Args:
+            x (_type_): _description_
+        """
         return x
 
     def fit(self, x):
+        """X is size (None, lev)
+
+        Args:
+            x (_type_): _description_
+        """
         self.fitted = True
-        return x
 
     def sub_vec(self,lev):
         return(np.zeros(lev))
@@ -34,38 +44,6 @@ class Preprocess(object):
         return 'type : {} \nfitted : {} \nvalues : {} \n  '
 
 
-class VarSuppression(Preprocess):
-    """
-    List of input variables are takken away from the input and unsed
-    """
-    def __init__(self, list_of_suppressed_vars):
-        super().__init__()
-        self._list_of_suppressed_vars = list_of_suppressed_vars
-
-    @property
-    def eliminated_vars(self):
-        return(self._list_of_suppressed_vars)
-
-    def __call__(self, x, header):
-        id_var_used = [ header.index(var) for var in header if not var in self._list_of_suppressed_vars ]
-        return(x[:,id_var_used])
-
-    def __str__(self):
-        return 'type : Var Supression \n values : {} \n'.format(self._list_of_suppressed_vars)
-
-class SetToZero(Preprocess):
-    """
-    List of input variables are set to 0 and unsed for the training
-    """
-    def __init__(self, set_to_zero):
-        super().__init__()
-        self._list_of_suppressed_vars = list_of_suppressed_vars
-
-    def __call__(self, x, header):
-        id_to_zero = [ header.index(var) for var in header if var in self._list_of_suppressed_vars ]
-        x[:,id_var_used]*=0
-        return(x)
-
 class Normalizer(Preprocess):
     """
     Transform the input into a variable of mean 0 and norm 1
@@ -76,9 +54,7 @@ class Normalizer(Preprocess):
         self.std = 1
 
     def __call__(self, x, headers=None):
-        x -= self.m
-        x /= self.std
-        return x
+        return (x - self.m) / self.std
 
     def fit(self, x):
         self.fitted=True
@@ -94,60 +70,13 @@ class Normalizer(Preprocess):
         self.m = x
         self.std = y
 
-    def sub_vec(self, lev):
-        return(np.zeros(lev)+self.m)
-
-    def prod_vec(self, lev):
-        return(np.ones(lev)/self.std)
-
     def __str__(self):
         return super().__str__().format("Normalizer", self.fitted, (self.m, self.std))
 
-class Positive_Normalizer(Preprocess):
-    """
-    Transform the input into a variable of mean 0 and norm 1
-    Then set the minimum to 0 for Jacobian
-    """
-    def __init__(self):
-        super().__init__()
-        self.m = (0,0) # mean and min
-        self.std = 1
-
-    def __call__(self, x, headers=None):
-        x -= self.m[0]
-        x /= self.std
-        x -= self.m[1]
-        return x
-
-    def fit(self, x):
-        self.fitted=True
-        self.m = (np.mean(x), np.min( x - np.mean(x) )/np.std(x) )
-        self.std = np.std(x)
-
-    @property
-    def params(self):
-        return self.m, self.std
-
-    def set_params(self, cst, std):
-        """
-        CST is a tuple (mean, min)
-        """
-        self.fitted=True
-        self.m = cst
-        self.std = std
-
-    def sub_vec(self, lev):
-        return(np.zeros(lev)+self.m)
-
-    def prod_vec(self, lev):
-        return(np.ones(lev)/self.std)
-
-    def __str__(self):
-        return super().__str__().format("Normalizer", self.fitted, (self.m, self.std))
 
 class Zero_One(Preprocess):
     """
-    Match the input to a variable in [0,1]
+    Match the input to a variable in [0,1] uses for cloud variables
     """
     def __init__(self):
         super().__init__()
@@ -155,10 +84,8 @@ class Zero_One(Preprocess):
         self.min = 1
 
     def __call__(self, x, headers=None):
-        x -= self.min
-        x /= (self.max-self.min)
-        return x
-
+        return (x-self.min) / (self.max - self.min)
+    
     def fit(self, x):
         self.fitted=True
         self.min = np.min(x)
@@ -169,12 +96,6 @@ class Zero_One(Preprocess):
         self.min = x
         self.max = y
 
-    def sub_vec(self, lev):
-        return(np.zeros(lev)+self.min)
-
-    def prod_vec(self, lev):
-        return(np.ones(lev)/((self.max-self.min)))
-
     @property
     def params(self):
         return self.min, self.max
@@ -182,6 +103,107 @@ class Zero_One(Preprocess):
     def __str__(self):
         return super().__str__().format("Zero_One", self.fitted, (self.max, self.min))
 
+
+class Level_Normalizer(Preprocess):
+    """
+    Substract the mean of each level
+    If renorm is true, the lower level is 
+    """
+    def __init__(self, normalisation_method='no'):
+        """Construct a Level Normaliser
+
+        Args:
+            use_renorm (str): 
+            - Anything or no : no normalisation (norm is one)
+            - 'surface' : division by surface std value (usefull for pressure)
+            - 'top' : division by surface std value (usefull for o3)
+            - 'abs' : divided by mean of abs values(usefull for o3)
+        """
+        super().__init__()
+        self.L = 0. # becomes array of size lev when fitted
+        self.norm = 1. # always float 
+        self.normalisation_method = normalisation_method # if renorm is true, 
+
+    def __call__(self, x, headers=None):
+        if self.fitted:
+            return (x - self.L) / self.norm
+        else:
+            return x
+
+    def fit(self, x):
+        self.L = np.mean(x, axis=0)
+        self.fitted = True
+        if self.normalisation_method == 'surface':
+            self.norm = np.std(x, axis=0)[-1]
+        elif self.normalisation_method == 'top':
+            self.norm = np.std(x, axis=0)[0]
+        elif self.normalisation_method == 'abs':
+            self.norm = np.std(x, axis=0)[-1] # last level
+        else:
+            pass
+
+    def set_params(self, L):
+        self.fitted=True
+        self.L = L
+        self.use_renorm = False
+
+    @property
+    def params(self):
+        return self.L, self.norm
+
+    def __str__(self):
+        return super().__str__().format("Level_Normalizer", self.fitted, self.L)
+    
+class Log_Level_Normalizer(Preprocess):
+    """
+    Substract the mean of each level
+    If renorm is true, the lower level is 
+    """
+    def __init__(self, normalisation_method='no'):
+        """Construct a Level Normaliser
+
+        Args:
+            use_renorm (str): 
+            - Anything or no : no normalisation (norm is one)
+            - 'surface' : division by surface std value (usefull for pressure)
+            - 'top' : division by surface std value (usefull for o3)
+            - 'abs' : divided by mean of abs values(usefull for o3)
+        """
+        super().__init__()
+        self.L = 0. # becomes array of size lev when fitted
+        self.norm = 1. # always float 
+        self.normalisation_method = normalisation_method # if renorm is true, 
+
+    def __call__(self, x, headers=None):
+        if self.fitted:
+            return (np.log(x + 0.00000001) - self.L) / self.norm
+        else:
+            return np.log(x + 0.00000001)
+
+    def fit(self, x):
+        self.L = np.mean(np.log(x + 0.00000001), axis=0)
+        self.fitted = True
+        if self.normalisation_method == 'surface':
+            self.norm = np.std(np.log(x + 0.00000001), axis=0)[-1]
+        elif self.normalisation_method == 'top':
+            self.norm = np.std(np.log(x + 0.00000001), axis=0)[0]
+        elif self.normalisation_method == 'abs':
+            self.norm = np.std(np.log(x + 0.00000001), axis=0)[-1] # last level
+        else:
+            pass
+
+    def set_params(self, L):
+        self.fitted=True
+        self.L = L
+        self.use_renorm = False
+
+    @property
+    def params(self):
+        return self.L, self.norm
+
+    def __str__(self):
+        return super().__str__().format("Level_Normalizer", self.fitted, self.L)
+    
 
 class Binary(Preprocess):
     """
@@ -213,55 +235,16 @@ class Binary(Preprocess):
         return super().__str__().format("Zero_One", self.fitted, (self.max, self.min))
 
 
-class Level_Normalizer(Preprocess):
-    """
-    Set the mean to 0 for every level
-    """
-    def __init__(self, use_renorm):
+class DeltaFlux(Preprocess):
+    def __init__(self):
         super().__init__()
-        self.L =0
-        self.norm = 1
-        self.use_renorm = use_renorm
 
     def __call__(self, x, headers=None):
-        if self.fitted:
-            x-= self.L/ self.norm
-        else:
-            x-= np.mean(x, axis=0)#.reshape(1,-1)
-            norm = np.std(x, axis=0)[-1]
-            if self.renorm:
-                x/= norm
-        return x
+        return x[1:] - x[:-1]
 
-    def fit(self, x):
-        self.L = np.mean(x, axis=0)
-        self.fitted = True
-        if self.renorm:
-            self.norm = np.std(x, axis=0)[-1]
-
-    def set_params(self, L):
-        self.fitted=True
-        self.L = L
-        self.use_renorm = False
-
-    @property
-    def renorm(self):
-        return self.use_renorm
-
-    def sub_vec(self, lev):
-        return np.zeros(lev) + self.L
-
-    def prod_vec(self, lev):
-        return np.ones(lev) / self.norm
-
-    @property
-    def params(self):
-        return self.L, self.norm
-
-    def __str__(self):
-        return super().__str__().format("Level_Normalizer", self.fitted, self.L)
 
 ###################################### Dict preprocess class
+# More complex 
 
 
 class DictPrepross(Preprocess):
@@ -427,4 +410,65 @@ class FKernel(Kernel):
     def __str__(self):
         return super().__str__().format("Fkernel", (self.vars, self.fname), self.gamma)
 
+class VarSuppression(Preprocess):
+    """
+    List of input variables are takken away from the input and unsed
+    """
+    def __init__(self, list_of_suppressed_vars):
+        super().__init__()
+        self._list_of_suppressed_vars = list_of_suppressed_vars
+
+    @property
+    def eliminated_vars(self):
+        return(self._list_of_suppressed_vars)
+
+    def __call__(self, x, header):
+        id_var_used = [ header.index(var) for var in header if not var in self._list_of_suppressed_vars ]
+        return(x[:,id_var_used])
+
+    def __str__(self):
+        return 'type : Var Supression \n values : {} \n'.format(self._list_of_suppressed_vars)
+
 ################### Dict Creation (to avoid recomputing)
+
+class Positive_Normalizer(Preprocess):
+    """
+    Transform the input into a variable of mean 0 and norm 1
+    Then set the minimum to 0 for Jacobian
+    """
+    def __init__(self):
+        super().__init__()
+        self.m = (0,0) # mean and min
+        self.std = 1
+
+    def __call__(self, x, headers=None):
+        x -= self.m[0]
+        x /= self.std
+        x -= self.m[1]
+        return x
+
+    def fit(self, x):
+        self.fitted=True
+        self.m = (np.mean(x), np.min( x - np.mean(x) )/np.std(x) )
+        self.std = np.std(x)
+
+    @property
+    def params(self):
+        return self.m, self.std
+
+    def set_params(self, cst, std):
+        """
+        CST is a tuple (mean, min)
+        """
+        self.fitted=True
+        self.m = cst
+        self.std = std
+
+    def sub_vec(self, lev):
+        return(np.zeros(lev)+self.m)
+
+    def prod_vec(self, lev):
+        return(np.ones(lev)/self.std)
+
+    def __str__(self):
+        return super().__str__().format("Normalizer", self.fitted, (self.m, self.std))

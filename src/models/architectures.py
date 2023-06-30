@@ -1,28 +1,40 @@
-from CST import CST
 import keras
 from keras import regularizers
-from keras.models import Sequential
-from keras.layers import Dense, LSTM, Activation, Flatten, Input, TimeDistributed, Concatenate
-from keras.layers import Conv1D, UpSampling1D,  SeparableConv1D, MaxPooling1D, Dropout,AveragePooling1D
-from keras.layers import UpSampling2D, Conv2D, AveragePooling2D, SeparableConv2D
-
-from keras.layers import Bidirectional, Lambda, Reshape, SpatialDropout1D
-from keras.losses import mean_squared_error
+# 1d
+from keras.layers import Conv1D, UpSampling1D, MaxPooling1D, AveragePooling1D, SpatialDropout1D
+# 2d
+from keras.layers import UpSampling2D, Conv2D, AveragePooling2D
+# utils
+from keras.layers import Lambda, Reshape, Dropout,  Dense, Flatten, Input, Concatenate
 from keras import backend as K
-from keras import regularizers
-import tensorflow as tf
-import os
-import numpy as np
-from contextlib import redirect_stdout
-from CST import CST
-from architectures_utils import Name, Activation_Generator
+from .architectures_utils import Name, Activation_Generator
+
+
+# KERAS CHANGES :
+## Upsampling 1D :data_format for upsampling (MUST BE CHANNELS LAST)
+## AveragePooling1D : stride do not exist, strides is the new argument
+## Can't assign name property in activation
+
 
 """
 This file produce complex architectures such as the Bidirectional ConvNet and several Unet"
 """
+def Upsampler(avg, pooling, input_shape, data_format='channels_last'):
+    """
+    Generate a Upsampler model, perform a
+    avg : size of upsampling
+    pooling : size of pooling
+    input_shape : shape of the input
+    adverage is perform on avg/pooling terms
+    """
+    Input0 = Input(shape=input_shape)
+    Up = UpSampling1D(avg)(Input0)
+    Avg = AveragePooling1D(pooling, padding='same', strides=avg,
+                                    data_format=data_format)(Up)
+    return keras.Model(Input0, Avg)
 
 ##################### BD casual Conv
-def Bidir_Casual_Conv(list_of_kernel_s, list_of_filters, list_of_activations, params, in_channel, lev=CST.lev(CST), reg=0.0001):
+def Bidir_Casual_Conv(list_of_kernel_s, list_of_filters, list_of_activations, params, in_channel, lev=72, reg=0.0001):
     """
     all list argument must be of length 3, each sublist of the same size as list_of_kernels' sublists
     list_xx[0] : parameters for the up-convolutions
@@ -66,31 +78,9 @@ def Bidir_Casual_Conv(list_of_kernel_s, list_of_filters, list_of_activations, pa
         C1d_prime.append( AG(list_of_activations[2][i], Name(list_of_activations[2][i]+'_c', 1+i), params )(C1d_prime[-1]) )
     return keras.Model(Input0, C1d_prime[-1])
 
-#################
-
-def Sep_Conv2D(list_of_kernel_s, list_of_filters, list_of_activations, params, in_channel, lev=CST.lev(CST), reg=0.0001, data_format='channels_first'):
-    """
-    all list argument must be of length 3, each sublist of the same size as list_of_kernels' sublists
-    list_xx : parameters for the sep-convolutions
-    kernels : kernel size
-    filters : number of filters
-    activations : activation function names for Activation_Generator()
-    params : parameters for activation function
-    (in_channel, lev) : shape of input
-    reg : regularizers weights for every layer
-    """
-    Input0 = Input(shape=(lev, in_channel), name=Name('Input',0), dtype='float32')
-    AG = Activation_Generator()
-    Conv1=[Input0]
-    for i in range(len(list_of_filters)):
-        Conv1.append(SeparableConv2D(filters = list_of_filters[i], kernel_size= list_of_kernel_s[i], \
-                        padding='same', name=Name("Conv_u",i+1), use_bias=True, kernel_regularizer=regularizers.l2(reg))(Conv1u[-1]),
-                        data_format=data_format)
-        Conv1.append( AG(list_of_activations[i], Name(list_of_activations[i]+'_u', i+1), params )(Conv1u[-1]) )
-    return keras.Model(Input0, Conv1[-1])
 
 ################
-def Bidir_Casual_Conv2D(list_of_kernel_s, list_of_filters, list_of_activations, params, in_channel, lev=CST.lev(CST), reg=0.0001):
+def Bidir_Casual_Conv2D(list_of_kernel_s, list_of_filters, list_of_activations, params, in_channel, lev=72, reg=0.0001):
     """
     all list argument must be of length 3, each sublist of the same size as list_of_kernels' sublists
     list_xx[0] : parameters for the up-convolutions
@@ -135,7 +125,7 @@ def Bidir_Casual_Conv2D(list_of_kernel_s, list_of_filters, list_of_activations, 
     return keras.Model(Input0, C1d_prime[-1])
 
 ##################### Unet Simple
-def Unet_Act_Double(list_of_kernels_s, list_of_filters, list_of_activations, params=[], Div=3, lev=CST.lev(CST), in_channel=11, reg=1e-7 ):
+def Unet_Act_Double(list_of_kernels_s, list_of_filters, list_of_activations, params=[], Div=3, lev=72, in_channel=11, reg=1e-7 ):
     """
     Generate a Unet-Archictecture:
     list_xx[0] : parameters for the starting convolutions
@@ -176,7 +166,7 @@ def Unet_Act_Double(list_of_kernels_s, list_of_filters, list_of_activations, par
 # DownScaling (Div*2 Convolutions)
     Conv_l1 = [Conv_l0[-1]]
     for i in range(Sizes[1]//2):
-        Conv_l1.append(AveragePooling1D(2, padding='same', stride=2, name=Name('AVG', i+100))(Conv_l1[-1]))
+        Conv_l1.append(AveragePooling1D(2, padding='same', strides=2, name=Name('AVG', i+100))(Conv_l1[-1]))
         Conv_l1.append(Conv1D(filters=list_of_filters[1][2*i], kernel_size=list_of_kernels_s[1][2*i],
                                padding='same', name=Name('Conv', i+100))(Conv_l1[-1] ))
         Conv_l1.append(AG(list_of_activations[1][2*i], Name(list_of_activations[1][2*i], 100+i), params )(Conv_l1[-1]) )
@@ -218,7 +208,7 @@ def Unet_Act_Double(list_of_kernels_s, list_of_filters, list_of_activations, par
     return keras.Model(Conv_l0[0], Conv_l4[-1])
 
 ############Unet with DP and no fullyConnected
-def Unet_Act_Double_DP(list_of_kernels_s, list_of_filters, list_of_activations, list_of_dropout, params=[], Div=3, lev=CST.lev(CST), in_channel=11, reg=0.001 ):
+def Unet_Act_Double_DP(list_of_kernels_s, list_of_filters, list_of_activations, list_of_dropout, params=[], Div=3, lev=72, in_channel=11, reg=0.001 ):
     """
     Generate a Unet-Archictecture:
     list_of_xxx : list of 5 list containing info for xxx
@@ -261,7 +251,7 @@ def Unet_Act_Double_DP(list_of_kernels_s, list_of_filters, list_of_activations, 
 # DownScaling
     Conv_l1 = [Conv_l0[-1]]
     for i in range(Sizes[1]//2):
-        Conv_l1.append(AveragePooling1D(2, padding='same', stride=2, name=Name('AVG', i+100))(Conv_l1[-1]))
+        Conv_l1.append(AveragePooling1D(2, padding='same', strides=2, name=Name('AVG', i+100))(Conv_l1[-1]))
         Conv_l1.append(Conv1D(filters=list_of_filters[1][2*i], kernel_size=list_of_kernels_s[1][2*i],
                                padding='same', name=Name('Conv', i+100))(Conv_l1[-1] ))
         Conv_l1.append(AG(list_of_activations[1][2*i], Name(list_of_activations[1][2*i], 100+i), params )(Conv_l1[-1]) )
@@ -306,7 +296,7 @@ def Unet_Act_Double_DP(list_of_kernels_s, list_of_filters, list_of_activations, 
     return keras.Model(Conv_l0[0], Conv_l4[-1])
 
 ##### Bias
-def Unet_Act_Double_DP_Bias(list_of_kernels_s, list_of_filters, list_of_activations, list_of_dropout, params=[], Div=3, lev=CST.lev(CST), in_channel=11, reg=0.001 ):
+def Unet_Act_Double_DP_Bias(list_of_kernels_s, list_of_filters, list_of_activations, list_of_dropout, params=[], Div=3, lev=72, in_channel=11, reg=0.001 ):
     """
     Generate a Unet-Archictecture with bias output :
     outputs are size (lev+1)
@@ -351,7 +341,7 @@ def Unet_Act_Double_DP_Bias(list_of_kernels_s, list_of_filters, list_of_activati
 # DownScaling
     Conv_l1 = [Conv_l0[-1]]
     for i in range(Sizes[1]//2):
-        Conv_l1.append(AveragePooling1D(2, padding='same', stride=2, name=Name('AVG', i+100))(Conv_l1[-1]))
+        Conv_l1.append(AveragePooling1D(2, padding='same', strides=2, name=Name('AVG', i+100))(Conv_l1[-1]))
         Conv_l1.append(Conv1D(filters=list_of_filters[1][2*i], kernel_size=list_of_kernels_s[1][2*i],
                                padding='same', name=Name('Conv', i+100))(Conv_l1[-1] ))
         Conv_l1.append(AG(list_of_activations[1][2*i], Name(list_of_activations[1][2*i], 100+i), params )(Conv_l1[-1]) )
@@ -412,7 +402,7 @@ def Unet_Act_Double_DP_Bias(list_of_kernels_s, list_of_filters, list_of_activati
 
 ############## Unet_Act_Double_2D
 def Unet_Act_Double_2D(list_of_kernels_s, list_of_filters, list_of_activations, list_of_dropout,
-                       params=[], Div=3, lev=CST.lev(CST), in_channel=11, reg=0.0,
+                       params=[], Div=3, lev=72, in_channel=11, reg=0.0,
                        data_format='channels_first'):
     """
     Generate a Unet-Archictecture:
@@ -490,7 +480,7 @@ def Unet_Act_Double_2D(list_of_kernels_s, list_of_filters, list_of_activations, 
     return keras.Model(Conv_l0[0], Conv_l4[-1])
 
 def Unet_Act_Double_AE_2D(list_of_kernels_s, list_of_filters, list_of_activations, list_of_dropout,
-                       params=[], Div=3, lev=CST.lev(CST), in_channel=11, reg=0.0,
+                       params=[], Div=3, lev=72, in_channel=11, reg=0.0,
                        data_format='channels_first'):
     """
     Generate a Unet-Archictecture:
@@ -566,7 +556,7 @@ def Unet_Act_Double_AE_2D(list_of_kernels_s, list_of_filters, list_of_activation
     return keras.Model(Conv_l0[0], Conv_l4[-1])
 
 ###############Other uNets
-def Contraction(list_of_kernels_s, list_of_filters, list_of_activations,  list_of_dropout, params=[], Div=3, lev=CST.lev(CST), in_channel=11, reg=0.001):
+def Contraction(list_of_kernels_s, list_of_filters, list_of_activations,  list_of_dropout, params=[], Div=3, lev=72, in_channel=11, reg=0.001):
     """
     Generate a Contracter Net (first half of the Unet)
     """
@@ -583,7 +573,7 @@ def Contraction(list_of_kernels_s, list_of_filters, list_of_activations,  list_o
 # DownScaling
     Conv_l1 = [Conv_l0[-1]]
     for i in range(Sizes[1]//2):
-        Conv_l1.append(AveragePooling1D(2, padding='same', stride=2, name=Name('AVG', i+100))(Conv_l1[-1]))
+        Conv_l1.append(AveragePooling1D(2, padding='same', strides=2, name=Name('AVG', i+100))(Conv_l1[-1]))
         Conv_l1.append(Conv1D(filters=list_of_filters[1][2*i], kernel_size=list_of_kernels_s[1][2*i],
                                padding='same', name=Name('Conv', i+100))(Conv_l1[-1] ))
         Conv_l1.append(AG(list_of_activations[1][2*i], Name(list_of_activations[1][2*i], 100+i), params )(Conv_l1[-1]) )
@@ -604,7 +594,7 @@ def Contraction(list_of_kernels_s, list_of_filters, list_of_activations,  list_o
 
 
 
-def AE(list_of_kernels_s, list_of_filters, list_of_activations, list_of_dropout, params=[], Div=3, lev=CST.lev(CST), in_channel=11, reg=0.001 ):
+def AE(list_of_kernels_s, list_of_filters, list_of_activations, list_of_dropout, params=[], Div=3, lev=72, in_channel=11, reg=0.001 ):
     """
     Generate a Unet-Archictecture
     list_of_kernels : list of 3 lists containing the kernel size for convolution
@@ -628,7 +618,7 @@ def AE(list_of_kernels_s, list_of_filters, list_of_activations, list_of_dropout,
 # DownScaling
     Conv_l1 = [Conv_l0[-1]]
     for i in range(Sizes[1]//2):
-        Conv_l1.append(MaxPooling1D(2, padding='same', stride=2, name=Name('AVG', i+100))(Conv_l1[-1]))
+        Conv_l1.append(MaxPooling1D(2, padding='same', strides=2, name=Name('AVG', i+100))(Conv_l1[-1]))
         Conv_l1.append(Conv1D(filters=list_of_filters[1][2*i], kernel_size=list_of_kernels_s[1][2*i],
                                padding='same', name=Name('Conv', i+100))(Conv_l1[-1] ))
         Conv_l1.append(AG(list_of_activations[1][2*i], Name(list_of_activations[1][2*i], 100+i), params )(Conv_l1[-1]) )
@@ -676,7 +666,7 @@ def AE(list_of_kernels_s, list_of_filters, list_of_activations, list_of_dropout,
 
 ################## CUSTOMS
 
-def Unet_Double_XXXXX(list_of_kernels_s, list_of_filters, list_of_activations, params=[], Div=3, lev=CST.lev(CST), in_channel=11, reg=0.001 ):
+def Unet_Double_XXXXX(list_of_kernels_s, list_of_filters, list_of_activations, params=[], Div=3, lev=72, in_channel=11, reg=0.001 ):
     """
     Generate a Unet-Archictecture
     list_of_kernels : list of 3 lists containing the kernel size for convolution
@@ -700,7 +690,7 @@ def Unet_Double_XXXXX(list_of_kernels_s, list_of_filters, list_of_activations, p
 # DownScaling
     Conv_l1 = [Conv_l0[-1]]
     for i in range(Sizes[1]//2):
-        Conv_l1.append(MaxPooling1D(2, padding='same', stride=2, name=Name('AVG', i+100))(Conv_l1[-1]))
+        Conv_l1.append(MaxPooling1D(2, padding='same', strides=2, name=Name('AVG', i+100))(Conv_l1[-1]))
         Conv_l1.append(Conv1D(filters=list_of_filters[1][2*i], kernel_size=list_of_kernels_s[1][2*i],
                                padding='same', name=Name('Conv', i+100))(Conv_l1[-1] ))
         Conv_l1.append(AG(list_of_activations[1][2*i], Name(list_of_activations[1][2*i], 100+i), params )(Conv_l1[-1]) )
@@ -742,7 +732,7 @@ def Unet_Double_XXXXX(list_of_kernels_s, list_of_filters, list_of_activations, p
 
 ############# OLD AND UNUSED architectures ###################
 
-def Bidir_Casual_Conv_L1(list_of_kernel_s, list_of_filters, list_of_activations, params, in_channel, lev=CST.lev(CST), reg=0.0001):
+def Bidir_Casual_Conv_L1(list_of_kernel_s, list_of_filters, list_of_activations, params, in_channel, lev=72, reg=0.0001):
     """
     Same as Bidir_Casual_Conv but with L1 norm
     """
@@ -750,7 +740,7 @@ def Bidir_Casual_Conv_L1(list_of_kernel_s, list_of_filters, list_of_activations,
 
     Flip_layer = lambda x: K.reverse(x, axes=0)
 #    I_cp = UpSampling1D(ups, name=Name('Up',0))(Input0)
-#    I_avg = AveragePooling1D(pooling, padding='same', stride=ups, name='AVG_p')(I_cp)
+#    I_avg = AveragePooling1D(pooling, padding='same', strides=ups, name='AVG_p')(I_cp)
     I_flip = Lambda(Flip_layer, name=Name('Flip',0))(Input0)
 
     Conv1u = [Input0]
@@ -785,7 +775,7 @@ def Bidir_Casual_Conv_L1(list_of_kernel_s, list_of_filters, list_of_activations,
     return keras.Model(Input0, C1d_prime[-1])
 
 
-def Unet_Act_Simple(list_of_kernels_s, list_of_filters, list_of_activations, params=[], Div=3, lev=CST.lev(CST), in_channel=11, reg=0.001 ):
+def Unet_Act_Simple(list_of_kernels_s, list_of_filters, list_of_activations, params=[], Div=3, lev=72, in_channel=11, reg=0.001 ):
     """
     Generate a Unet-Archictecture
     list_of_kernels : list of 3 lists containing the kernel size for convolution
@@ -808,7 +798,7 @@ def Unet_Act_Simple(list_of_kernels_s, list_of_filters, list_of_activations, par
     ACT_l1.append(Input(name = 'Origin_Input',  dtype='float32', shape=(lev, in_channel)))
     for i in range(Div):
         Poolings_l.append(AveragePooling1D(2, padding='same', \
-                                           stride=2, name=Name('AVG', i+1))(ACT_l1[-1]))
+                                           strides=2, name=Name('AVG', i+1))(ACT_l1[-1]))
         Conv_l1.append(Conv1D(filters=list_of_filters[0][i], kernel_size=list_of_kernels_s[0][i],
                                 padding='same', name=Name('Conv1',i+1), activity_regularizer=regularizers.l2(reg))( Poolings_l[-1] ))
         ACT_l1.append( AG(list_of_activations[0][i], Name(list_of_activations[0][i], 10+i), params  )(Conv_l1[-1]) )
