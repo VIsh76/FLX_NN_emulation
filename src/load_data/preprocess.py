@@ -19,12 +19,9 @@ class Preprocess(object):
         return []
 
     def __call__(self, x, headers=None):
-        """X is size (None, lev)
-
-        Args:
-            x (_type_): _description_
+        """Return a new vector fitted
         """
-        return x
+        return self.__call__( x.copy() )
 
     def fit(self, x):
         """X is size (None, lev)
@@ -33,6 +30,9 @@ class Preprocess(object):
             x (_type_): _description_
         """
         self.fitted = True
+
+    def apply(self, x):
+        return x
 
     def sub_vec(self,lev):
         return(np.zeros(lev))

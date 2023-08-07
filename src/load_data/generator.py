@@ -1,4 +1,5 @@
-import tensorflow as tf
+from torch.utils.data import DataLoader
+import torch
 import numpy as np
 import itertools
 import random
@@ -8,7 +9,7 @@ from .load_file import  get_dimension, load_nc4
 from .find_files import get_all_nc4_files
 
 
-class BasicGenerator(tf.keras.utils.Sequence):
+class BasicGenerator(object):
     """Hypothesis :
     - all tiles have the same shape
 
@@ -34,7 +35,6 @@ class BasicGenerator(tf.keras.utils.Sequence):
             output_variables (list): list of str, selected output variables
             shuffle (bool, optional): if true, select random elements instead of in order. Defaults to True.
         """
-
         self.list_of_files = get_all_nc4_files(data_path)
         self.input_variables = input_variables
         self.output_variables = output_variables
@@ -52,6 +52,8 @@ class BasicGenerator(tf.keras.utils.Sequence):
         self.on_epoch_end()
     
     def on_epoch_end(self):
+        if self.test:
+            print('on epoch end')
         self.file_portion_id = [ element for element in itertools.product(*[np.arange(self.nb_files),  np.arange(self.nb_portions)]) ]
         if self.shuffle:
             random.shuffle(self.file_portion_id)
@@ -122,15 +124,14 @@ class BasicGenerator(tf.keras.utils.Sequence):
         portion_id = self.get_portion_id(batches)
         start = self.get_start(batches)
 
-
         shuffle_file_id, shuffle_portion_id = self.file_portion_id[file_id * self.nb_portions +  portion_id]
 
         if shuffle_file_id != self.current_file_id or  shuffle_portion_id != self.current_portion_id:
             if self.test:
                 print(f"Reload from {self.current_file_id}-{self.current_portion_id} to file {shuffle_file_id}-{shuffle_portion_id} ")
             self.reload(shuffle_file_id, shuffle_portion_id)
-
-        return tf.convert_to_tensor(self.X[start:start+self.batch_size], dtype=tf.float32), tf.convert_to_tensor(self.Y[start:start+self.batch_size], tf.float32)
+        # Pytorch requires channel first :
+        return torch.from_numpy(np.swapaxes(self.X[start:start+self.batch_size], 1, 2).astype(np.float32)), torch.from_numpy(np.swapaxes(self.Y[start:start+self.batch_size], 1, 2).astype(np.float32))
 
     def __getitem__(self, index):
         X, y = self.__get_data(index) 
@@ -151,8 +152,15 @@ class PreprocessGenerator(BasicGenerator):
                  _max_length=-1):
         self.preprocessor_x = preprocessor_x
         self.preprocessor_y = preprocessor_y
-        super().__init__(data_path, nb_portions, batch_size, input_variables, output_variables, shuffle, test, _max_length)
-    
+        super().__init__(data_path,
+                 nb_portions,
+                 batch_size,
+                 input_variables,
+                 output_variables,
+                 shuffle,
+                 test,
+                 _max_length)
+
 
     def reload(self, file_id, portion_id):
         super().reload(file_id, portion_id)
@@ -168,7 +176,6 @@ class PreprocessGenerator(BasicGenerator):
 
     def preprocess_y(self):
         self.Y = self.Y[:, 1:] - self.Y[:, :-1]
-
 
 
 # LOAD Xarray (fast) -> dict of array 
