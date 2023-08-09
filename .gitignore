@@ -34,7 +34,8 @@ SavedModels
 # Python folder and files
 __pycache__
 Data/
-.venv/*
+code_legacy/*
+.tf_env/*
 .pytorch_env/*
 .idea
 .ipynb_checkpoints

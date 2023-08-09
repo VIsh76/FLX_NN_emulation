@@ -5,7 +5,7 @@ import itertools
 import random
 import xarray as xr
 
-from .load_file import  get_dimension, load_nc4
+from .load_file import load_nc4
 from .find_files import get_all_nc4_files
 
 
@@ -22,6 +22,7 @@ class BasicGenerator(object):
                  batch_size,
                  input_variables,
                  output_variables,
+                 file_keys=['X', 'Y'],
                  shuffle=True,
                  test=False,
                  _max_length=-1):
@@ -35,19 +36,25 @@ class BasicGenerator(object):
             output_variables (list): list of str, selected output variables
             shuffle (bool, optional): if true, select random elements instead of in order. Defaults to True.
         """
-        self.list_of_files = get_all_nc4_files(data_path)
-        self.input_variables = input_variables
-        self.output_variables = output_variables
-        self.nb_files = len(self.list_of_files)
-        self.test = test
-
-        # Get the dimensions using any core file
-        self.x, self.y, self.z = get_dimension(xr.open_dataset(self.list_of_files[0][0]))
+        self.file_keys = file_keys
+        self.file_keys.sort()
         self.nb_portions = nb_portions        
         self.batch_size = batch_size
         self.shuffle = shuffle
+        self.test = test
         self._max_length = _max_length
+        self.input_variables = input_variables
+        self.output_variables = output_variables        
+        self.data_path = data_path
 
+    def check():
+        pass
+
+    def initialize(self):
+        self.dict_of_files = get_all_nc4_files(self.data_path, self.file_keys)
+        self.nb_files = len(self.dict_of_files[self.file_keys[0]])
+        # Get the dimensions using any core file
+        self.x, self.y, self.z = self.get_dimension()
         # idx :
         self.on_epoch_end()
     
@@ -99,21 +106,9 @@ class BasicGenerator(object):
     def reload(self, file_id, portion_id):
         self.current_file_id = file_id
         self.current_portion_id = portion_id
-        ################################################################
-        if self.test:
-            print("Loading X :")
-        data_X = xr.open_dataset(self.list_of_files[file_id][0])
-        self.X = load_nc4(data_X,  self.nb_portions, id=portion_id, vars=self.input_variables, verbose=self.test)
-        self.X =np.reshape(self.X, (-1, self.z, len(self.input_variables)))
-        del(data_X)
-        if self.test:
-            print("Loading Y :")
-        data_Y = xr.open_dataset( self.list_of_files[file_id][1])
-        self.Y = load_nc4(data_Y,  self.nb_portions, id=portion_id, vars=self.output_variables, verbose=self.test)
-        self.Y = np.reshape(self.Y, (-1, self.z+1, len(self.output_variables)))
-        del(data_Y)
-        ################################################################
-        if self.shuffle :
+        self.generate_X(file_id, portion_id)
+        self.generate_Y(file_id, portion_id)
+        if self.shuffle:
             l = np.random.permutation(self.Y.shape[0])
             self.X = self.X[l]
             self.Y = self.Y[l]
@@ -137,14 +132,94 @@ class BasicGenerator(object):
         X, y = self.__get_data(index) 
         return X, y
 
+# ABSTRACT :
+    def get_dimension(self):
+        # Open the first file and check the dimension
+        file_0 = self.dict_of_files[self.file_keys[0]][0]
+        data = xr.open_dataset(file_0)        
+        x = len(data['Xdim'])
+        y = len(data['Ydim'])
+        z = len(data['lev'])
+        return x, y, z
+    
+    def generate_X(self, file_id, portion_id):
+        if self.test:
+            print("Loading X :")
+        data_X = xr.open_dataset(self.dict_of_files['X'][file_id])
+        self.X = load_nc4(data_X,  self.nb_portions, id=portion_id, vars=self.input_variables, verbose=self.test)
+        self.X = np.reshape(self.X, (-1, self.z, len(self.input_variables)))
+        del(data_X)
 
-class PreprocessGenerator(BasicGenerator):
+    def generate_Y(self, file_id, portion_id):
+        if self.test:
+            print("Loading Y :")
+        data_Y = xr.open_dataset( self.dict_of_files['Y'][file_id])
+        self.Y = load_nc4(data_Y,  self.nb_portions, id=portion_id, vars=self.output_variables, verbose=self.test)
+        self.Y = np.reshape(self.Y, (-1, self.z+1, len(self.output_variables)))
+        del(data_Y)
+        
+
+class PhysicGenerator(BasicGenerator):
     def __init__(self,
                  data_path,
                  nb_portions,
                  batch_size,
                  input_variables,
                  output_variables,
+                 file_keys=['X', 'Y'],
+                 preprocessor_y=[],
+                 preprocessor_x=[],
+                 shuffle=True,
+                 test=False,
+                 _max_length=-1):      
+        super().__init__(data_path, 
+                         nb_portions, 
+                         batch_size, 
+                         input_variables, 
+                         output_variables,
+                         file_keys, 
+                         shuffle, 
+                         test, 
+                         _max_length)
+        self.preprocessor_x = preprocessor_x
+        self.preprocessor_y = preprocessor_y
+        self.check()
+        self.initialize()
+
+    def reload(self, file_id, portion_id):
+        super().reload(file_id, portion_id)
+        self.preprocess_x()
+        self.preprocess_y()
+        
+    def check(self):
+        # Check file format
+        assert(['X'] in self.file_keys)
+        assert(['Y'] in self.file_keys)
+        # Check if the input can be substracted from the output
+        assert( len(self.output_variables) <= len(self.input_variables))
+        for i, v in enumerate(self.output_variables):
+            assert(v == self.input_variables[i])
+
+    def preprocess_x(self):
+        for i, var in enumerate(self.input_variables):
+            if var in self.preprocessor_x:
+                if self.test:
+                    print(f"Preprocessing {var} - {i}")
+                self.X[:, :, i] = self.preprocessor_x[var](self.X[:, :, i])
+
+    def preprocess_y(self):
+        # We compute the difference between 
+        self.Y = self.Y - self.X[:len(self.output_variables)]
+
+
+class PreprocessColumnGenerator(BasicGenerator):
+    def __init__(self,
+                 data_path,
+                 nb_portions,
+                 batch_size,
+                 input_variables,
+                 output_variables,
+                 file_keys=['X', 'Y'],
                  preprocessor_y=[],
                  preprocessor_x=[],
                  shuffle=True,
@@ -157,9 +232,11 @@ class PreprocessGenerator(BasicGenerator):
                  batch_size,
                  input_variables,
                  output_variables,
+                 file_keys,
                  shuffle,
                  test,
                  _max_length)
+        self.initialize()
 
 
     def reload(self, file_id, portion_id):
@@ -177,6 +254,8 @@ class PreprocessGenerator(BasicGenerator):
     def preprocess_y(self):
         self.Y = self.Y[:, 1:] - self.Y[:, :-1]
 
+
+# get_all_nc4_files_fullphys(data_path, D)
 
 # LOAD Xarray (fast) -> dict of array 
 # -> loading one var into an array

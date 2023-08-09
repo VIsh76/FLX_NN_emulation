@@ -1,8 +1,9 @@
 import warnings
 import datetime
 import os
+from collections import OrderedDict
 
-def get_all_nc4_files(input_path):
+def get_all_nc4_files_old(input_path):
     """Given an input path, will return a list of tuple
 
     Args:
@@ -28,29 +29,18 @@ def get_all_nc4_files(input_path):
     return L
 
 
-def get_all_nc4_files_fullphys(data_path, D):
+def get_all_nc4_files(data_path, struct_list):
     """
-    = 20000414_2107z
-    Given the path of DATA/
-    Requires the main folder to have 3 subfolder : 
-    - ML_DATA_input
-    - ML_DATA_nophys
-    - ML_DATA_phys    
-    Dates of the input are heartbeat minutes lower than output
-    INPUT have a date that is 
-    Will provide path to : 
-    - input 
-    - output no phys
-    - output phys
-
     Args:
-        input_path (string): path where all the nc4 files are
-
+        data_path (string): path where all the nc4 files are
+        struct_list (list of string): identifier name for each folder containing nc4
     Returns:
-        list of tuple: a list of each tuple (input_file_path, output_file_path)
+        dict: a dict with struct_list elements as keys the output is a list of file path
     """
-    keys = list(D.keys())
-    keys.sort()
+    struct_list.sort()
+    D = OrderedDict()
+    for s in struct_list:
+        D[s] = []
     ide=-1
     files = []
     for root, dirs, files in os.walk(data_path):
@@ -63,5 +53,11 @@ def get_all_nc4_files_fullphys(data_path, D):
                 if not flag:
                     flag = True
                     ide+=1
-                D[keys[ide]].append(root+'/'+file)
+                D[struct_list[ide]].append(root+'/'+file)
+    # Check DATA coherence
+    for i, key in enumerate(D):
+        if i==0:
+            ide=len(D[key])
+        elif ide != len(D[key]):
+            warnings.warn(f'{key} doesnt have the same length / folder integrity wrong')
     return D

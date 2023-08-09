@@ -1,11 +1,7 @@
 import numpy as np 
 import time
 
-def get_dimension(data):
-    x = len(data['Xdim'])
-    y = len(data['Ydim'])
-    z = len(data['lev'])
-    return x, y, z
+ 
 
 def load_slow(data, portions, id, vars, verbose=0):
     """Load a portion of the data into a numpy array, form training purposes

@@ -8,12 +8,15 @@ import torch.nn as nn
 
 class UNet(nn.Module):
 
-    def __init__(self, in_channels=3, 
+    def __init__(self, lev,
+                       in_channels=3, 
                        out_channels=1, 
-                       init_features=32):
+                       init_features=32,
+                       ):
         super(UNet, self).__init__()
 
         features = init_features
+        self.lev = lev
         self.encoder1 = UNet._block(in_channels, features, name="enc1")
         self.pool1 = nn.MaxPool1d(kernel_size=2, stride=2)
         self.encoder2 = UNet._block(features, features * 2, name="enc2")
@@ -49,7 +52,7 @@ class UNet(nn.Module):
         )
         # BOTTLE NECK
         self.flatten = nn.Flatten()
-        self.SIZE = 72//2//2//2
+        self.SIZE = lev//2//2//2
         self.NUM_FEATURES = features * 8
         self.fc = nn.Linear(self.SIZE*self.NUM_FEATURES, self.SIZE*self.NUM_FEATURES)
         self.relu = nn.ReLU()
