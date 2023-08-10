@@ -74,6 +74,25 @@ class Normalizer(Preprocess):
         return super().__str__().format("Normalizer", self.fitted, (self.m, self.std))
 
 
+class Rescaler(Normalizer):
+    """
+    Just perform rescaling (set the Normalizer mean to 0)
+    """
+    def __init__(self):
+        super().__init__()
+
+    def fit(self, x):
+        super().fit(x)
+        self.m = 0
+
+    @property
+    def params(self):
+        return self.std
+
+    def __str__(self):
+        return super().__str__().format("Rescaler", self.fitted, self.params)
+
+
 class Zero_One(Preprocess):
     """
     Match the input to a variable in [0,1] uses for cloud variables

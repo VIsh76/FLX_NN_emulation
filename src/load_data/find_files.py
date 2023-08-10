@@ -37,7 +37,6 @@ def get_all_nc4_files(data_path, struct_list):
     Returns:
         dict: a dict with struct_list elements as keys the output is a list of file path
     """
-    struct_list.sort()
     D = OrderedDict()
     for s in struct_list:
         D[s] = []
