@@ -231,7 +231,12 @@ class PhysicGenerator(BasicGenerator):
 
     def preprocess_y(self):
         # We compute the difference between 
-        self.Y = self.Y - self.X[:, :, :len(self.output_variables)]
+        self.Y = (self.Y - self.X[:, :, :len(self.output_variables)])
+        for i, var in enumerate(self.output_variables):
+            if var in self.preprocessor_y:
+                if self.verbose>=2:
+                    print(f"Preprocessing {var} - {i}")
+                self.Y[:, :, i] = self.preprocessor_y[var](self.Y[:, :, i])
 
 
 class PreprocessColumnGenerator(BasicGenerator):
