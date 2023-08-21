@@ -74,25 +74,6 @@ class Normalizer(Preprocess):
         return super().__str__().format("Normalizer", self.fitted, (self.m, self.std))
 
 
-class Rescaler(Normalizer):
-    """
-    Just perform rescaling (set the Normalizer mean to 0)
-    """
-    def __init__(self):
-        super().__init__()
-
-    def fit(self, x):
-        super().fit(x)
-        self.m = 0
-
-    @property
-    def params(self):
-        return self.std
-
-    def __str__(self):
-        return super().__str__().format("Rescaler", self.fitted, self.params)
-
-
 class Zero_One(Preprocess):
     """
     Match the input to a variable in [0,1] uses for cloud variables
@@ -137,11 +118,12 @@ class Level_Normalizer(Preprocess):
             - 'surface' : division by surface std value (usefull for pressure)
             - 'top' : division by surface std value (usefull for o3)
             - 'abs' : divided by mean of abs values(usefull for o3)
+            - 'std' : divided by the std of the level
         """
         super().__init__()
         self.L = 0. # becomes array of size lev when fitted
-        self.norm = 1. # always float 
-        self.normalisation_method = normalisation_method # if renorm is true, 
+        self.norm = 1. # becomes arry of size when fitted
+        self.normalisation_method = normalisation_method # how to normalize 
 
     def __call__(self, x, headers=None):
         if self.fitted:
@@ -157,9 +139,10 @@ class Level_Normalizer(Preprocess):
         elif self.normalisation_method == 'top':
             self.norm = np.std(x, axis=0)[0]
         elif self.normalisation_method == 'abs':
-            self.norm = np.std(x, axis=0)[-1] # last level
-        else:
-            pass
+            self.norm = np.std(abs(x), axis=0)[-1] # last level
+        elif self.normalisation_method == 'std':
+            self.norm = np.std(x, axis=0)
+        self.norm = np.maximum(self.norm, 0.001)
 
     def set_params(self, L):
         self.fitted=True
@@ -173,6 +156,26 @@ class Level_Normalizer(Preprocess):
     def __str__(self):
         return super().__str__().format("Level_Normalizer", self.fitted, self.L)
     
+
+class Rescaler(Level_Normalizer):
+    """
+    Just perform rescaling (set the Normalizer mean to 0)
+    """
+    def __init__(self, normalisation_method):
+        super().__init__(normalisation_method=normalisation_method)
+
+    def fit(self, x):
+        super().fit(x)
+        self.m = 0
+
+    @property
+    def params(self):
+        return self.std
+
+    def __str__(self):
+        return super().__str__().format("Rescaler", self.fitted, self.params)
+
+
 class Log_Level_Normalizer(Preprocess):
     """
     Substract the mean of each level
