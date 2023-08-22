@@ -170,7 +170,7 @@ class Rescaler(Level_Normalizer):
 
     @property
     def params(self):
-        return self.std
+        return self.norm
 
     def __str__(self):
         return super().__str__().format("Rescaler", self.fitted, self.params)

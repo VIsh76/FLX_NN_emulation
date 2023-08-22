@@ -59,7 +59,7 @@ class BasicGenerator(object):
         self.on_epoch_end()
     
     def on_epoch_end(self):
-        if self.verbose>1:
+        if self.verbose>=1:
             print('on epoch end')
         self.file_portion_id = [ element for element in itertools.product(*[np.arange(self.nb_files),  np.arange(self.nb_portions)]) ]
         if self.shuffle:

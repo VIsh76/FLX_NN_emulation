@@ -1,66 +1,32 @@
-# %% [markdown]
-# # FIT
-
-# %%
-# Parameters :
-import numpy as np
-
-input_var = ['t', 'u', 'v',  'phis', 
-             'frland','frlandice','frlake','frocean', # 'frseaice','ps_dyn'
-             'sphu','qitot','qltot','delp',
-             'dudtdyn', 'dvdtdyn', 'dtdtdyn']
-
-pred_var = ['t', 'u', 'v']
-
-in_channel = len(input_var)
-out_channel = len(pred_var)
-# preprocessor_path = "Data/preprocess/test_basic_preprocessor_0.pickle"
-
-# %%
 from src.load_data.generator import PhysicGenerator
 import matplotlib.pyplot as plt
 import pickle
 
-data_path_train = "/Users/vmarchai/Documents/ML_DATA/c48_XY_only_train"
-data_path_test = "/Users/vmarchai/Documents/ML_DATA/c48_XY_only_test"
-graph_path = "Output/fullphys_0/Graph"
-output_path = 'Output/fullphys_0/preprocess'
-preprocess_name_X = f'{output_path}/X_fullphys_preprocess.pickle'
-preprocess_name_Y = f'{output_path}/Y_fullphys_preprocess.pickle'
+# Parameters :
+from params import input_variables, pred_variables
+from params import preprocess_X_path, preprocess_Y_path
+from params import data_path, graph_path, output_path
 
-with open(preprocess_name_X, 'rb') as handle:
+with open(preprocess_X_path, 'rb') as handle:
      preprocessor_x = pickle.load(handle)
-with open(preprocess_name_Y, 'rb') as handle:
+with open(preprocess_Y_path, 'rb') as handle:
      preprocessor_y = pickle.load(handle)
      
 
 
-data_loader = PhysicGenerator(data_path=data_path_train,
+data_loader = PhysicGenerator(data_path = data_path,
                    nb_portions=1,
                    batch_size=32,
-                   input_variables = input_var,
-                   output_variables = pred_var,
+                   input_variables = input_variables,
+                   output_variables = pred_variables,
                    file_keys=['X', 'Y'],
                    shuffle=True,
                    preprocessor_x = preprocessor_x,
                    preprocessor_y = preprocessor_y,
                    verbose=1,
                    _max_length=-1)
-
-data_loader_test = PhysicGenerator(data_path=data_path_test,
-                   nb_portions=1,
-                   batch_size=32,
-                   input_variables = input_var,
-                   output_variables = pred_var,
-                   file_keys=['X', 'Y'],
-                   shuffle=True,
-                   preprocessor_x = preprocessor_x,
-                   preprocessor_y = preprocessor_y,
-                   verbose=1,
-                   _max_length=-1) # 97_200
-
+data_loader_test=0
 print(len(data_loader))
-print(len(data_loader_test))
 
 # %%
 print(data_loader.X.shape, data_loader.Y.shape)
@@ -93,21 +59,6 @@ for i, var in enumerate(data_loader.input_variables):
     ax.plot(data_loader.X[:10, :, i].T)
     ax.set_title(var)
 
-# %% [markdown]
-# ### PREPROCESSOR
-
-# %%
-print(data_loader.X.shape)
-print(np.min(data_loader.Y,axis=(0,1)))
-print(np.max(data_loader.Y,axis=(0,1)))
-
-# %%
-print(np.min(data_loader.Y,axis=(0,1)))
-print(np.max(data_loader.Y,axis=(0,1)))
-
-# %% [markdown]
-# ### Check if the data are corrects
-
 # %%
 f = plt.figure(figsize=(15,15))
 for i, var in enumerate(data_loader.input_variables):
@@ -116,34 +67,19 @@ for i, var in enumerate(data_loader.input_variables):
     ax.set_title(var)
 
 # %%
-3600 * 24 / 450 / 2
-
-# %% [markdown]
-# ## TEST ON OUTPUT:
-
-# %%
 import torch
+import numpy as np
+from src.models.unet import UNet
+import torch
+
 start=0
 print(data_loader.Y.shape)
 #torch.from_numpy(np.swapaxes(self.X[start:start+self.batch_size], 1, 2).astype(np.float32)), 
 y = np.swapaxes(data_loader.Y[start:start+data_loader.batch_size], 1, 2).astype(np.float32)
 yt = torch.from_numpy(y)
 
-# %%
-f = plt.figure(figsize=(15,3*len(pred_var)))
-for i,var in enumerate(pred_var):
-    ax = f.add_subplot(len(pred_var), 1, i+1)
-    ax.plot(data_loader.Y[:1000, :, i].T); 
-    ax.set_title(var); 
 
-# %% [markdown]
-# ## ARCHITECTURE CREATION
-
-# %%
-from src.models.unet import UNet
-import torch
-
-model = UNet(lev=data_loader.z, in_channels=len(input_var), out_channels=len(pred_var))
+model = UNet(lev=data_loader.z, in_channels=len(input_variables), out_channels=len(pred_variables))
 with torch.no_grad():
     model(data_loader[0][0] );
 
@@ -233,25 +169,11 @@ def run_test():
             loss_item += loss_fn(outputs,y).item()
     return loss_item
 
-# %%
-run_test()
-
-# %% [markdown]
-# ### TRACKERS :
-
-# %%
 loss_list = train_n_epoch(1, saving_freq=100)
-
-# %%
 with torch.no_grad():
     x, y = data_loader[1]
     y_pred = model(x)
 
-# %%
-run_test()
-
-# %%
-# np.mean(data_loader.Y, axis=0)
 simple_pred = np.mean(data_loader.Y, axis=0)
 
 ml_mse_err = ((y_pred -y).numpy())**2
@@ -268,13 +190,13 @@ print('meam_msa_err' , ': \t', mean_mae_err.mean())
 loss_fn
 
 # %%
-f = plt.figure(figsize=(15, len(pred_var)*5))
+f = plt.figure(figsize=(15, len(pred_variables)*5))
 
-for i, var in enumerate(pred_var):
-    ax_0 = f.add_subplot(len(pred_var), 2, 2*i+1);
+for i, var in enumerate(pred_variables):
+    ax_0 = f.add_subplot(len(pred_variables), 2, 2*i+1);
     ax_0.plot(y_pred[:, i].T);
     ax_0.set_title(var+' pred')
-    ax_1 = f.add_subplot(len(pred_var), 2, 2*i+2);
+    ax_1 = f.add_subplot(len(pred_variables), 2, 2*i+2);
     ax_1.plot(y[:, i].T); 
     ax_1.set_title(var+' truth')
 
