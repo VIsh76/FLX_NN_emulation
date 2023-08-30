@@ -7,3 +7,8 @@ h5py
 psutil
 pandas
 netCDF4
+
+# Solar
+pysolar
+# Simplified work
+ephem

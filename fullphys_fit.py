@@ -11,7 +11,6 @@ with open(preprocess_X_path, 'rb') as handle:
      preprocessor_x = pickle.load(handle)
 with open(preprocess_Y_path, 'rb') as handle:
      preprocessor_y = pickle.load(handle)
-     
 
 
 data_loader = PhysicGenerator(data_path = data_path,
@@ -25,17 +24,13 @@ data_loader = PhysicGenerator(data_path = data_path,
                    preprocessor_y = preprocessor_y,
                    verbose=1,
                    _max_length=-1)
+
 data_loader_test=0
-print(len(data_loader))
 
-# %%
-print(data_loader.X.shape, data_loader.Y.shape)
 
-# %%
 plt.plot(data_loader.X[31, :, 1]);
 plt.plot(data_loader[0][0][-1,1] - 1 );
 
-# %%
 import xarray as xr
 from src.graphic.full_phys import show_all_faces
 

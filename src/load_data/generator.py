@@ -5,7 +5,7 @@ import itertools
 import random
 import xarray as xr
 
-from .load_file import load_nc4, load_nc4_cube
+from .load_file import FullLoader, VarLoader
 from .find_files import get_all_nc4_files
 
 
@@ -42,9 +42,14 @@ class BasicGenerator(object):
         self.shuffle = shuffle
         self.verbose = verbose
         self._max_length = _max_length
-        self.input_variables = input_variables
-        self.output_variables = output_variables        
+        
+        self.X_Loader = FullLoader(input_variables, nb_portions)
+        self.Y_Loader = VarLoader(output_variables, nb_portions)
+        self.input_variables =  self.X_Loader.variables
+        self.output_variables = self.Y_Loader.variables    
         self.data_path = data_path
+        
+        
 
     def check(self):
         assert('X' in self.file_keys)
@@ -55,6 +60,9 @@ class BasicGenerator(object):
         self.nb_files = len(self.dict_of_files[self.file_keys[0]])
         # Get the dimensions using any core file
         self.x, self.y, self.z = self.get_dimension()
+        # set Loader
+        self.X_Loader.set(self.y, self.z)
+        self.Y_Loader.set(self.y, self.z)
         # idx :
         self.on_epoch_end()
     
@@ -106,10 +114,10 @@ class BasicGenerator(object):
     def reload(self, file_id, portion_id):
         self.current_file_id = file_id
         self.current_portion_id = portion_id
-        if self.verbose>=1:
+        if self.verbose>=2:
             print('Generate X')
         self.generate_X(file_id, portion_id)
-        if self.verbose>=1:
+        if self.verbose>=2:
             print('Generate Y')
         self.generate_Y(file_id, portion_id)
         if self.shuffle:
@@ -148,14 +156,14 @@ class BasicGenerator(object):
     
     def generate_X(self, file_id, portion_id):
         data_X = xr.open_dataset(self.dict_of_files['X'][file_id])
-        self.X = load_nc4(data_X,  self.nb_portions, id=portion_id, vars=self.input_variables, verbose=self.verbose-1)
+        self.X = self.X_Loader.load(data_X, id=portion_id, verbose=self.verbose)
         self.X = np.reshape(self.X, (-1, self.z, len(self.input_variables))) # reshape lev 
         del(data_X)
 
     def generate_Y(self, file_id, portion_id):
         data_Y = xr.open_dataset( self.dict_of_files['Y'][file_id])
-        self.Y = load_nc4(data_Y,  self.nb_portions, id=portion_id, vars=self.output_variables, verbose=self.verbose-1)
-        self.Y = np.reshape(self.Y, (-1, self.z+1, len(self.output_variables)))  # reshape lev+1 (output)
+        self.Y = self.Y_Loader.load(data_Y, id=portion_id, verbose=self.verbose)
+        self.Y = np.reshape(self.Y, (-1, self.z, len(self.output_variables)))  # reshape lev+1 (output)
         del(data_Y)
         
 
@@ -208,19 +216,6 @@ class PhysicGenerator(BasicGenerator):
         y = len(data['Ydim']) * len(data['nf']) #
         z = len(data['lev'])
         return x, y, z
-    
-    def generate_X(self, file_id, portion_id):
-        data_X = xr.open_dataset(self.dict_of_files['X'][file_id])
-        self.X = load_nc4_cube(data_X,  self.nb_portions, id=portion_id, vars=self.input_variables, verbose=self.verbose-1)
-        self.X = np.reshape(self.X, (-1, self.z, len(self.input_variables)))
-        del(data_X)
-
-    def generate_Y(self, file_id, portion_id):
-        data_Y = xr.open_dataset( self.dict_of_files['Y'][file_id])
-        self.Y = load_nc4_cube(data_Y,  self.nb_portions, id=portion_id, vars=self.output_variables, verbose=self.verbose-1)
-        self.Y = np.reshape(self.Y, (-1, self.z, len(self.output_variables)))
-        self.Y0 = self.Y.copy()
-        del(data_Y)
 
     def preprocess_x(self):
         for i, var in enumerate(self.input_variables):
@@ -280,10 +275,5 @@ class PreprocessColumnGenerator(BasicGenerator):
     def preprocess_y(self):
         self.Y = self.Y[:, 1:] - self.Y[:, :-1]
 
-# get_all_nc4_files_fullphys(data_path, D)
 
-# LOAD Xarray (fast) -> dict of array 
-# -> loading one var into an array
 
-# -> load one var -> tensor
-# -> concatenate 

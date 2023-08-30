@@ -7,16 +7,19 @@ class Preprocess(object):
     """
     Parent class of Preprocessing class
     """
-    def __init__(self):
+    def __init__(self, input_var, output_var=None, supress=False, inplace=False):
         self.fitted=False
-
-    @property
-    def new_vars(self):
-        return []
-
-    @property
-    def eliminated_vars(self):
-        return []
+        self.input_var = input_var
+        if output_var is None:
+            output_var = input_var
+        self.output_var = output_var
+        self.inplace = inplace
+        self.supress = supress        
+        # Check integrity
+        if not self.inplace:
+            assert(self.output_var != self.input_var) # var names must ne different
+        if self.supress:
+            assert(not self.inplace) # if the var is suppress do not replace it inplace
 
     def __call__(self, x, headers=None):
         """Return a new vector fitted
@@ -40,16 +43,20 @@ class Preprocess(object):
     def prod_vec(self,lev):
         return(np.ones(lev))
 
+    @property
+    def params(self):
+        return []
+
     def __str__(self):
-        return 'type : {} \nfitted : {} \nvalues : {} \n  '
+        return 'type : {} \nfitted : {} \nvalues : {} \n'
 
 
 class Normalizer(Preprocess):
     """
     Transform the input into a variable of mean 0 and norm 1
     """
-    def __init__(self):
-        super().__init__()
+    def __init__(self,  input_var, output_var=None):
+        super().__init__(input_var, output_var, supress=False, inplace=True)
         self.m = 0
         self.std = 1
 
@@ -78,8 +85,8 @@ class Zero_One(Preprocess):
     """
     Match the input to a variable in [0,1] uses for cloud variables
     """
-    def __init__(self):
-        super().__init__()
+    def __init__(self,  input_var, output_var=None):
+        super().__init__(input_var, output_var, supress=False, inplace=True)
         self.max = 1
         self.min = 1
 
@@ -109,7 +116,7 @@ class Level_Normalizer(Preprocess):
     Substract the mean of each level
     If renorm is true, the lower level is 
     """
-    def __init__(self, normalisation_method='no'):
+    def __init__(self,  input_var, output_var=None, normalisation_method='no'):
         """Construct a Level Normaliser
 
         Args:
@@ -120,7 +127,7 @@ class Level_Normalizer(Preprocess):
             - 'abs' : divided by mean of abs values(usefull for o3)
             - 'std' : divided by the std of the level
         """
-        super().__init__()
+        super().__init__(input_var, output_var, supress=False, inplace=True)
         self.L = 0. # becomes array of size lev when fitted
         self.norm = 1. # becomes arry of size when fitted
         self.normalisation_method = normalisation_method # how to normalize 
@@ -161,8 +168,8 @@ class Rescaler(Level_Normalizer):
     """
     Just perform rescaling (set the Normalizer mean to 0)
     """
-    def __init__(self, normalisation_method):
-        super().__init__(normalisation_method=normalisation_method)
+    def __init__(self, input_var, output_var=None, normalisation_method=False):
+        super().__init__(input_var, output_var, normalisation_method=normalisation_method)
 
     def fit(self, x):
         super().fit(x)
@@ -181,7 +188,7 @@ class Log_Level_Normalizer(Preprocess):
     Substract the mean of each level
     If renorm is true, the lower level is 
     """
-    def __init__(self, normalisation_method='no'):
+    def __init__(self,  input_var, output_var=None, normalisation_method='no', inplace=False, supress=False):
         """Construct a Level Normaliser
 
         Args:
@@ -191,7 +198,7 @@ class Log_Level_Normalizer(Preprocess):
             - 'top' : division by surface std value (usefull for o3)
             - 'abs' : divided by mean of abs values(usefull for o3)
         """
-        super().__init__()
+        super().__init__( input_var, output_var, inplace=inplace, supress=supress)
         self.L = 0. # becomes array of size lev when fitted
         self.norm = 1. # always float 
         self.normalisation_method = normalisation_method # if renorm is true, 
@@ -225,150 +232,18 @@ class Log_Level_Normalizer(Preprocess):
 
     def __str__(self):
         return super().__str__().format("Level_Normalizer", self.fitted, self.L)
-    
-
-class Binary(Preprocess):
-    """
-    Set value to 0 when x=min, 1 if x!=min
-    """
-    def __init__(self):
-        super().__init__()
-        self.min = 1
-
-    def __call__(self, x, headers=None):
-        x = (x - self.min) / x
-        return x
-
-    def fit(self, x):
-        self.fitted=True
-        self.min = np.min(x)
-        self.max = np.max(x)
-
-    def set_params(self, x, y):
-        self.fitted = True
-        self.min = x
-        self.max = y
-
-    @property
-    def params(self):
-        return self.min, self.max
-
-    def __str__(self):
-        return super().__str__().format("Zero_One", self.fitted, (self.max, self.min))
-
-
-class DeltaFlux(Preprocess):
-    def __init__(self):
-        super().__init__()
-
-    def __call__(self, x, headers=None):
-        return x[1:] - x[:-1]
-
 
 ###################################### Dict preprocess class
-# More complex 
-
-
-class DictPrepross(Preprocess):
-    """
-    Dictionnary of Preprocess
-    """
-    def __init__(self, header, functions):
-        super(DictPrepross, self).__init__()
-        self.dict = dict()
-        for i, h in enumerate(header):
-            self.dict[h] = functions[i]
-
-    def load_from_pd(self, pd_file):
-        self.dict=dict()
-        for i, k in enumerate(pd_file['Name']):
-            self.dict[k] = eval(pd_file['Type'][i].split('.')[-1])()
-            self.dict[k].set_params(pd_file['P1'][i], pd_file['P2'][i])
-
-    def fitonGen(self, B, axis):
-        """ Generator must generate entire file """
-        header = B.variables
-        if(axis==1):
-            for k in self.dict.keys():
-                id = header.index(k)
-                x0 = B[0][0][:, id, :]
-                for i,(x,y) in enumerate(B):
-                    if i > 0:
-                        x0 = np.concatenate( (x0, x[:, id, :]), axis=0)
-                self[k].fit(x0)
-        elif axis==2:
-            for k in self.dict.keys():
-                id = header.index(k)
-                x0 = B[0][0][:, :, id]
-                for i,(x,y) in enumerate(B):
-                    if i > 0:
-                        x0 = np.concatenate( (x0, x[:, :, id]), axis=0)
-                self[k].fit(x0)
-        else:
-            assert(False)
-
-    @property
-    def new_vars(self):
-        output = []
-        for k in list(self.dict.keys()):
-            output = output + self[k].new_vars
-        return output
-
-    def add(self, F, v, params=[0, 1]):
-        self[v] = F
-        self[v].set_params(params)
-
-    def __call__(self, x, headers):
-        for i, h in enumerate(headers):
-            if h in self.dict.keys():
-                x[:, i] = self[h](x[:,i])
-        return x
-
-    def call_on_pd(self,data_f):
-        for h in self.dict.keys():
-            data_f[h] = self[h](data_f[h])
-        return data_f
-
-    def __getitem__(self, k):
-        return self.dict[k]
-
-    def __len__(self):
-        return len(self.dict)
-
-    def __str__(self):
-        out =''
-        l = list(self.dict.keys())
-        l.sort()
-        for h in l:
-            out = out + '{} : {}'.format(h, str(self[h]))+'\n'
-        return out
-
-    def to_array_save(self):
-        Type = []
-        Name = []
-        P1 = []
-        P2 = []
-        for k in self.dict:
-            Name.append(k)
-            Type.append(str(type(self[k]))[1:-2])
-            P1.append(self[k].params[0])
-            P2.append(self[k].params[1])
-        data = {'Name':Name, 'P1': P1, 'P2': P2, 'Type': Type}
-        return pd.DataFrame(data)
-
-################################### KERNEL class
-
 
 class Kernel(Preprocess):
-    def __init__(self, var):
+    def __init__(self, input_var, output_var, inplace=False, ):
         super(Kernel, self).__init__()
-        self.vars = var
 
     @property
     def new_vars(self):
         return []
 
-    def __call__(self, x, header):
+    def __call__(self, x):
         return x
 
     def __str__(self):
@@ -494,3 +369,55 @@ class Positive_Normalizer(Preprocess):
 
     def __str__(self):
         return super().__str__().format("Normalizer", self.fitted, (self.m, self.std))
+
+
+class Kernel(Preprocess):
+    def __init__(self, fct, input_var, output_var=None):
+        super().__init__(input_var, output_var, supress=True, inplace=False)
+        self.fct = np.vectorize(pyfunc = fct)
+
+    def __call__(self, x):
+        return self.fct(x)
+
+
+# DICT PREPROCESSOR:
+class DictPreprocess:
+    def __init__(self, prep_dictionnary):
+        self.dict = prep_dictionnary
+        
+    @property
+    def keys(self):
+        return self.dict.keys
+        
+    def __getitem__(self, v):
+        return self.dict[v]
+
+    @property
+    def input_variable(self):
+        l = []
+        for v in self.keys:
+            l.append(self[v].input_var)
+        return l
+            
+    @property
+    def output_variable(self):
+        l = []
+        for v in self.keys:
+            l.append(self[v].output_var)
+        return l
+
+    @property
+    def new_variables(self):
+        new_variables = []
+        for v in self.keys:
+            if not self[v].new_var:
+                new_variables.append(self[v].output_var)
+        return new_variables
+
+    @property
+    def delete_var(self):
+        delete_var = []
+        for v in self.keys:
+            if self[v].supress_var:
+                delete_var.append(self[v].input_var)
+        return set(delete_var)
