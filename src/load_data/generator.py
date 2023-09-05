@@ -25,7 +25,9 @@ class BasicGenerator(object):
                  file_keys=['X', 'Y'],
                  shuffle=True,
                  verbose = 0,
-                 _max_length=-1):
+                 device='cpu',
+                 _max_length=-1,
+                 ):
         """Construct a generator that will subpart of files for all the files
 
         Args:
@@ -42,13 +44,13 @@ class BasicGenerator(object):
         self.shuffle = shuffle
         self.verbose = verbose
         self._max_length = _max_length
+        self.device = device
         
         self.X_Loader = FullLoader(input_variables, nb_portions)
         self.Y_Loader = VarLoader(output_variables, nb_portions)
         self.input_variables =  self.X_Loader.variables
         self.output_variables = self.Y_Loader.variables    
         self.data_path = data_path
-        
         
 
     def check(self):
@@ -138,7 +140,9 @@ class BasicGenerator(object):
                 print(f"Reload from {self.current_file_id}-{self.current_portion_id} to file {shuffle_file_id}-{shuffle_portion_id} ")
             self.reload(shuffle_file_id, shuffle_portion_id)
         # Pytorch requires channel first : i.e (bs, lev, vars))
-        return torch.from_numpy(np.swapaxes(self.X[start:start+self.batch_size], 1, 2).astype(np.float32)), torch.from_numpy(np.swapaxes(self.Y[start:start+self.batch_size], 1, 2).astype(np.float32))
+        X = torch.from_numpy( np.swapaxes(self.X[start:start+self.batch_size], 1, 2).astype(np.float32)).to(self.device)
+        Y = torch.from_numpy( np.swapaxes(self.Y[start:start+self.batch_size], 1, 2).astype(np.float32)).to(self.device)
+        return X, Y
 
     def __getitem__(self, index):
         X, y = self.__get_data(index) 
@@ -179,6 +183,7 @@ class PhysicGenerator(BasicGenerator):
                  preprocessor_x=[],
                  shuffle=True,
                  verbose=0,
+                 device='cpu',
                  _max_length=-1):      
         super().__init__(data_path, 
                          nb_portions, 
@@ -188,7 +193,8 @@ class PhysicGenerator(BasicGenerator):
                          file_keys, 
                          shuffle, 
                          verbose, 
-                         _max_length)
+                         device,
+                         _max_length,)
         self.preprocessor_x = preprocessor_x
         self.preprocessor_y = preprocessor_y
         self.check()

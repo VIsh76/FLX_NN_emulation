@@ -1,4 +1,4 @@
-# %% [markdown]
+
 # # FIT
 
 # %%
@@ -13,7 +13,7 @@ in_channel = len(surface_var + col_var)
 out_channel = len(pred_var)
 preprocessor_path = "Data/preprocess/test_basic_preprocessor_0.pickle"
 
-# %% [markdown]
+
 # ### PREPROCESSOR
 
 # %%
@@ -43,7 +43,7 @@ print(np.min(data_loader.Y,axis=(0,1)))
 print(np.max(data_loader.Y,axis=(0,1)))
 print(np.amin(data_loader.Y,axis=(0,1)))
 
-# %% [markdown]
+
 # ### Check if the data are corrects
 
 # %%
@@ -53,7 +53,7 @@ for i, var in enumerate(data_loader.input_variables):
     ax.plot(data_loader.X[:10, :, i].T)
     ax.set_title(var)
 
-# %% [markdown]
+
 # ## ARCHITECTURE CREATION
 
 # %%
@@ -61,7 +61,7 @@ from src.models.unet import UNet
 
 model = UNet(lev=data_loader.z, in_channels=len(surface_var) + len(col_var), out_channels=2)
 
-# %% [markdown]
+
 # ## LOSS
 
 # %%
@@ -73,20 +73,20 @@ loss_fn = nn.MSELoss()
 loss_fn(torch.zeros((32, 2, 72)), 
         torch.ones((32, 2, 72)))
 
-# %% [markdown]
+
 # ## OPTIMIZER
 
 # %%
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001, betas=(0.9, 0.999))
 
-# %% [markdown]
+
 # ### TESTING :
 
 # %%
 x, y = data_loader[0]
 loss_fn(model(x), y)
 
-# %% [markdown]
+
 # ### TRAINING PROCEDURE
 
 # %%
@@ -125,7 +125,7 @@ def train_one_epoch(saving_freq=1000):
             running_loss = 0.
     return loss_list
 
-# %% [markdown]
+
 # ### TRACKERS :
 
 # %%

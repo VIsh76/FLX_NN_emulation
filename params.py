@@ -2,7 +2,7 @@ input_variables = ['u', 'v', 't', 'phis',
              'frland','frlandice','frlake','frocean', # 'frseaice',
              'sphu','qitot','qltot','delp','ps_dyn',
               'dudtdyn', 'dvdtdyn', 'dtdtdyn']
-pred_variables = ['u', 'v', 't']
+pred_variables = ['u', 'v']
 
 # Path :
 data_path = '/Users/vmarchai/Documents/ML_DATA/c48_XY_only_train'

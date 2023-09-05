@@ -35,7 +35,15 @@ SavedModels
 __pycache__
 Data/
 code_legacy/*
-.tf_env/*
-.pytorch_env/*
 .idea
 .ipynb_checkpoints
+
+# Env:
+.tf_env/*
+.pytorch_env/*
+.venv/*
+
+# logs
+*.out
+*.log
+*.tch

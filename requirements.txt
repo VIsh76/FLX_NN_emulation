@@ -1,4 +1,5 @@
 numpy
+xarray
 torch
 torchvision
 matplotlib

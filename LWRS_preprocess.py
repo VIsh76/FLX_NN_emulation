@@ -1,7 +1,7 @@
-# %% [markdown]
+
 # ### GENERATOR
 
-# %% [markdown]
+
 # Use a loader and then create preprocessors to be use in a latter loader with preprocessing
 
 # %%
@@ -52,7 +52,7 @@ for i, var in enumerate(PG_ex.input_variables):
     ax.plot(PG_ex.X[:10, :, i].T)
     ax.set_title(var)
 
-# %% [markdown]
+
 # # PLOTS :
 
 # %%
