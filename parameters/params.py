@@ -2,21 +2,12 @@ input_variables = ['u', 'v', 't', 'phis',
              'frland','frlandice','frlake','frocean', # 'frseaice',
              'sphu','qitot','qltot','delp','ps_dyn',
               'dudtdyn', 'dvdtdyn', 'dtdtdyn']
-pred_variables = ['u', 'v']
+pred_variables = ['u', 'v', 't']
 
-# Path :
-data_path = '/Users/vmarchai/Documents/ML_DATA/c48_XY_only_train'
-data_path_test = '/Users/vmarchai/Documents/ML_DATA/c48_XY_only_test'
-
-graph_path =  "Output/fullphys_0/Graph"
-output_path = 'Output/fullphys_0'
 
 # PREPROCESSORS :
 from src.preprocess.preprocess import Zero_One, Normalizer, Level_Normalizer, Log_Level_Normalizer, Rescaler
 
-
-preprocess_X_path = f'{output_path}/X_fullphys_preprocess.pickle'
-preprocess_Y_path = f'{output_path}/Y_fullphys_preprocess.pickle'
 
 preprocess_X = {
 ## Surface :
@@ -52,3 +43,22 @@ preprocess_Y = {
 test = False
 nb_portion = 1
 save = True
+
+import datetime
+
+# Path :
+
+## DATA
+data_path = '/Users/vmarchai/Documents/ML_DATA/c48_XY_only_train'
+data_path_test = '/Users/vmarchai/Documents/ML_DATA/c48_XY_only_test'
+
+# Experiments:
+experiments = f"Unet_{datetime.datetime.today().strftime('%Y%M%d')}"
+experiments = "Unet_20230914"
+
+# Experiment Name :
+output_path       = f"Output/{experiments}"
+graph_path        = f"Output/{experiments}/Graph"
+checkpoint_path   = f"Output/{experiments}/checkpoint"
+preprocess_X_path = f'Output/{experiments}/X_fullphys_preprocess.pickle'
+preprocess_Y_path = f'Output/{experiments}/Y_fullphys_preprocess.pickle'

@@ -13,3 +13,9 @@ netCDF4
 pysolar
 # Simplified work
 ephem
+tqdm
+
+# Cartopy projections :
+cartopy # requires 'sudo apt install libgeos-dev'
+tree
+scipy

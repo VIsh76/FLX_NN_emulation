@@ -33,6 +33,9 @@ class Preprocess(object):
             x (_type_): _description_
         """
         self.fitted = True
+    
+    def inverse(self, x):
+        return x
 
     def apply(self, x):
         return x
@@ -76,6 +79,9 @@ class Normalizer(Preprocess):
         self.fitted=True
         self.m = x
         self.std = y
+        
+    def inverse(self, x):
+        return x  * self.std + self.m
 
     def __str__(self):
         return super().__str__().format("Normalizer", self.fitted, (self.m, self.std))
@@ -106,6 +112,7 @@ class Zero_One(Preprocess):
     @property
     def params(self):
         return self.min, self.max
+    
 
     def __str__(self):
         return super().__str__().format("Zero_One", self.fitted, (self.max, self.min))
@@ -156,6 +163,9 @@ class Level_Normalizer(Preprocess):
         self.L = L
         self.use_renorm = False
 
+    def inverse(self, x):
+        return x  * self.norm + self.L
+
     @property
     def params(self):
         return self.L, self.norm
@@ -181,6 +191,8 @@ class Rescaler(Level_Normalizer):
 
     def __str__(self):
         return super().__str__().format("Rescaler", self.fitted, self.params)
+    
+
 
 
 class Log_Level_Normalizer(Preprocess):
@@ -233,191 +245,3 @@ class Log_Level_Normalizer(Preprocess):
     def __str__(self):
         return super().__str__().format("Level_Normalizer", self.fitted, self.L)
 
-###################################### Dict preprocess class
-
-class Kernel(Preprocess):
-    def __init__(self, input_var, output_var, inplace=False, ):
-        super(Kernel, self).__init__()
-
-    @property
-    def new_vars(self):
-        return []
-
-    def __call__(self, x):
-        return x
-
-    def __str__(self):
-        return 'type : {} \nvariable : {} \nparams : {} \n  '
-
-
-class ProdKernel(Kernel):
-    def __init__(self, var=[]):
-        Kernel.__init__(self, var)
-
-    def __call__(self, x, header):
-        """ header is the header of x"""
-        for v1,v2 in self.vars:
-            id1, id2 = header.index(v1), header.index(v2)
-            xm = (x[:, id1, :]*x[:, id2, :]).reshape(x.shape[0], 1, x.shape[2])
-            x = np.concatenate((x, xm), axis=1)
-        return x
-
-    def call_on_pd(self, dataf):
-        for v1,v2 in self.vars:
-            Mu=dataf[v1].mul(dataf[v2])
-            Mu.columns = pd.MultiIndex.from_product([[str(v1)+'*'+str(v2)], Mu.columns])
-            dataf = dataf.join(Mu)
-        return dataf
-
-    @property
-    def new_vars(self):
-        return [str(v1)+'*'+str(v2) for v1,v2 in self.vars]
-
-    def __str__(self):
-        return super().__str__().format("Prodkernel", self.vars, ' ')
-
-
-class FKernel(Kernel):
-    def __init__(self, func, var, gamma=1):
-        Kernel.__init__(self, var=[])
-        self.func = func
-        self.gamma = gamma
-        self.fname = str(func).split(' ')[1]
-        self.vars = var
-
-    def __call__(self, x, header):
-        """ header is the header of x"""
-        for i, v1 in enumerate(header):
-            if v1 in self.vars:
-                xm = self.func(self.gamma * x[:, i, :]).reshape(x.shape[0], 1, x.shape[2])
-                x = np.concatenate((x, xm), axis=1)
-        return x
-
-    def call_on_pd(self, dataf):
-        for var in self.vars:
-            Mu=self.func(self.gamma*dataf[var])
-            Mu.columns = pd.MultiIndex.from_product([[self.fname+str(var)], Mu.columns])
-            dataf = dataf.join(Mu)
-        return dataf
-
-    @property
-    def new_vars(self):
-        return [self.fname+'_'+str(var) for var in self.vars]
-
-    def __str__(self):
-        return super().__str__().format("Fkernel", (self.vars, self.fname), self.gamma)
-
-class VarSuppression(Preprocess):
-    """
-    List of input variables are takken away from the input and unsed
-    """
-    def __init__(self, list_of_suppressed_vars):
-        super().__init__()
-        self._list_of_suppressed_vars = list_of_suppressed_vars
-
-    @property
-    def eliminated_vars(self):
-        return(self._list_of_suppressed_vars)
-
-    def __call__(self, x, header):
-        id_var_used = [ header.index(var) for var in header if not var in self._list_of_suppressed_vars ]
-        return(x[:,id_var_used])
-
-    def __str__(self):
-        return 'type : Var Supression \n values : {} \n'.format(self._list_of_suppressed_vars)
-
-################### Dict Creation (to avoid recomputing)
-
-class Positive_Normalizer(Preprocess):
-    """
-    Transform the input into a variable of mean 0 and norm 1
-    Then set the minimum to 0 for Jacobian
-    """
-    def __init__(self):
-        super().__init__()
-        self.m = (0,0) # mean and min
-        self.std = 1
-
-    def __call__(self, x, headers=None):
-        x -= self.m[0]
-        x /= self.std
-        x -= self.m[1]
-        return x
-
-    def fit(self, x):
-        self.fitted=True
-        self.m = (np.mean(x), np.min( x - np.mean(x) )/np.std(x) )
-        self.std = np.std(x)
-
-    @property
-    def params(self):
-        return self.m, self.std
-
-    def set_params(self, cst, std):
-        """
-        CST is a tuple (mean, min)
-        """
-        self.fitted=True
-        self.m = cst
-        self.std = std
-
-    def sub_vec(self, lev):
-        return(np.zeros(lev)+self.m)
-
-    def prod_vec(self, lev):
-        return(np.ones(lev)/self.std)
-
-    def __str__(self):
-        return super().__str__().format("Normalizer", self.fitted, (self.m, self.std))
-
-
-class Kernel(Preprocess):
-    def __init__(self, fct, input_var, output_var=None):
-        super().__init__(input_var, output_var, supress=True, inplace=False)
-        self.fct = np.vectorize(pyfunc = fct)
-
-    def __call__(self, x):
-        return self.fct(x)
-
-
-# DICT PREPROCESSOR:
-class DictPreprocess:
-    def __init__(self, prep_dictionnary):
-        self.dict = prep_dictionnary
-        
-    @property
-    def keys(self):
-        return self.dict.keys
-        
-    def __getitem__(self, v):
-        return self.dict[v]
-
-    @property
-    def input_variable(self):
-        l = []
-        for v in self.keys:
-            l.append(self[v].input_var)
-        return l
-            
-    @property
-    def output_variable(self):
-        l = []
-        for v in self.keys:
-            l.append(self[v].output_var)
-        return l
-
-    @property
-    def new_variables(self):
-        new_variables = []
-        for v in self.keys:
-            if not self[v].new_var:
-                new_variables.append(self[v].output_var)
-        return new_variables
-
-    @property
-    def delete_var(self):
-        delete_var = []
-        for v in self.keys:
-            if self[v].supress_var:
-                delete_var.append(self[v].input_var)
-        return set(delete_var)

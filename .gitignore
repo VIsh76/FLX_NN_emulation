@@ -34,14 +34,17 @@ SavedModels
 # Python folder and files
 __pycache__
 Data/
+Output
 code_legacy/*
 .idea
 .ipynb_checkpoints
+test.py
 
 # Env:
 .tf_env/*
 .pytorch_env/*
 .venv/*
+*.venv*
 
 # logs
 *.out

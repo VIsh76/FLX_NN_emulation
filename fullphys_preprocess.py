@@ -6,17 +6,15 @@ import time
 import os
 
 # Parameters :
-from params import input_variables, pred_variables
-from params import preprocess_X, preprocess_Y, preprocess_X_path, preprocess_Y_path
-from params import data_path, graph_path, output_path
+from parameters.params import input_variables, pred_variables
+from parameters.params import preprocess_X, preprocess_Y, preprocess_X_path, preprocess_Y_path
+from parameters.params import data_path, graph_path
 
 # Additioal params:
-from params import nb_portion, save, test
+from parameters.params import nb_portion, save, test
 
 print("Creating folders")
-os.makedirs(output_path, exist_ok=True)
 os.makedirs(graph_path, exist_ok=True)
-
 
 in_channel = len(input_variables)
 out_channel = len(pred_variables)

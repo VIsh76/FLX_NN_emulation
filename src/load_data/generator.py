@@ -23,10 +23,11 @@ class BasicGenerator(object):
                  input_variables,
                  output_variables,
                  file_keys=['X', 'Y'],
-                 shuffle=True,
+                 shuffle = True,
                  verbose = 0,
-                 device='cpu',
-                 _max_length=-1,
+                 device ='cpu',
+                 dtype = np.float32,
+                 _max_length = -1,
                  ):
         """Construct a generator that will subpart of files for all the files
 
@@ -45,6 +46,7 @@ class BasicGenerator(object):
         self.verbose = verbose
         self._max_length = _max_length
         self.device = device
+        self.dtype = dtype
         
         self.X_Loader = FullLoader(input_variables, nb_portions)
         self.Y_Loader = VarLoader(output_variables, nb_portions)
@@ -140,8 +142,8 @@ class BasicGenerator(object):
                 print(f"Reload from {self.current_file_id}-{self.current_portion_id} to file {shuffle_file_id}-{shuffle_portion_id} ")
             self.reload(shuffle_file_id, shuffle_portion_id)
         # Pytorch requires channel first : i.e (bs, lev, vars))
-        X = torch.from_numpy( np.swapaxes(self.X[start:start+self.batch_size], 1, 2).astype(np.float32)).to(self.device)
-        Y = torch.from_numpy( np.swapaxes(self.Y[start:start+self.batch_size], 1, 2).astype(np.float32)).to(self.device)
+        X = torch.from_numpy( np.swapaxes(self.X[start:start+self.batch_size], 1, 2).astype( self.dtype )).to(self.device)
+        Y = torch.from_numpy( np.swapaxes(self.Y[start:start+self.batch_size], 1, 2).astype( self.dtype )).to(self.device)
         return X, Y
 
     def __getitem__(self, index):
@@ -184,6 +186,7 @@ class PhysicGenerator(BasicGenerator):
                  shuffle=True,
                  verbose=0,
                  device='cpu',
+                 dtype=np.float32,
                  _max_length=-1):      
         super().__init__(data_path, 
                          nb_portions, 
@@ -194,6 +197,7 @@ class PhysicGenerator(BasicGenerator):
                          shuffle, 
                          verbose, 
                          device,
+                         dtype,
                          _max_length,)
         self.preprocessor_x = preprocessor_x
         self.preprocessor_y = preprocessor_y
@@ -238,48 +242,19 @@ class PhysicGenerator(BasicGenerator):
                 if self.verbose>=2:
                     print(f"Preprocessing {var} - {i}")
                 self.Y[:, :, i] = self.preprocessor_y[var](self.Y[:, :, i])
-
-
-class PreprocessColumnGenerator(BasicGenerator):
-    def __init__(self,
-                 data_path,
-                 nb_portions,
-                 batch_size,
-                 input_variables,
-                 output_variables,
-                 file_keys=['X', 'Y'],
-                 preprocessor_y=[],
-                 preprocessor_x=[],
-                 shuffle=True,
-                 verbose=0,
-                 _max_length=-1):
-        self.preprocessor_x = preprocessor_x
-        self.preprocessor_y = preprocessor_y
-        super().__init__(data_path,
-                 nb_portions,
-                 batch_size,
-                 input_variables,
-                 output_variables,
-                 file_keys,
-                 shuffle,
-                 verbose,
-                 _max_length)
-        self.initialize()
-
-    def reload(self, file_id, portion_id):
-        super().reload(file_id, portion_id)
-        self.preprocess_x()
-        self.preprocess_y()
-
-    def preprocess_x(self):
-        for i, var in enumerate(self.input_variables):
+                
+    def deprocess_y(self, y):
+        for i, var in enumerate(self.output_variables):
+            if var in self.preprocessor_y:
+                if self.verbose >= 2:
+                    print(f"Deprocess {var} - {i}")
+                y[:, i] = self.preprocessor_y[var].inverse(y[:, i])
+        return y
+            
+    def deprocess_x(self, x):
+        for i, var in enumerate(self.output_variables):
             if var in self.preprocessor_x:
-                if self.verbose>=2:
-                    print(f"Preprocessing {var} - {i}")
-                self.X[:, :, i] = self.preprocessor_x[var](self.X[:, :, i])
-
-    def preprocess_y(self):
-        self.Y = self.Y[:, 1:] - self.Y[:, :-1]
-
-
-
+                if self.verbose >= 2:
+                    print(f"Deprocess {var} - {i}")
+                x[:, i] = self.preprocessor_y[var].inverse(x[:, i])
+        return x
