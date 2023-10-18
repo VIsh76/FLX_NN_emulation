@@ -54,6 +54,9 @@ class BasicGenerator(object):
         self.output_variables = self.Y_Loader.variables    
         self.data_path = data_path
         
+    def to(self, device):
+        self.device = device
+        self.reload(self.current_file_id, self.current_portion_id)
 
     def check(self):
         assert('X' in self.file_keys)
@@ -83,7 +86,7 @@ class BasicGenerator(object):
     # SIZE AND LEN
     @property
     def elements_per_file(self):
-        return self.x * self.y // self.nb_portions
+        return self.elements_per_portions * self.nb_portions
     @property
     def elements_per_portions(self):
         return self.x * self.y // self.nb_portions
@@ -188,21 +191,21 @@ class PhysicGenerator(BasicGenerator):
                  device='cpu',
                  dtype=np.float32,
                  _max_length=-1):      
-        super().__init__(data_path, 
-                         nb_portions, 
-                         batch_size, 
-                         input_variables, 
-                         output_variables,
-                         file_keys, 
-                         shuffle, 
-                         verbose, 
-                         device,
-                         dtype,
-                         _max_length,)
+        super().__init__(data_path = data_path, 
+                         nb_portions = nb_portions, 
+                         batch_size = batch_size, 
+                         input_variables = input_variables, 
+                         output_variables = output_variables,
+                         file_keys = file_keys, 
+                         shuffle = shuffle, 
+                         verbose = verbose, 
+                         device = device,
+                         dtype = dtype,
+                         _max_length = _max_length)
         self.preprocessor_x = preprocessor_x
         self.preprocessor_y = preprocessor_y
-        self.check()
         self.initialize()
+        self.check()
 
     def reload(self, file_id, portion_id):
         super().reload(file_id, portion_id)
@@ -258,3 +261,69 @@ class PhysicGenerator(BasicGenerator):
                     print(f"Deprocess {var} - {i}")
                 x[:, i] = self.preprocessor_y[var].inverse(x[:, i])
         return x
+
+
+class OceanGenerator(PhysicGenerator):
+    def __init__(self,
+                 data_path,
+                 nb_portions,
+                 batch_size,
+                 input_variables,
+                 output_variables,
+                 file_keys=['X', 'Y'],
+                 preprocessor_y=[],
+                 preprocessor_x=[],
+                 max_layer = 1,
+                 min_frocean = 1,
+                 shuffle=True,
+                 verbose=0,
+                 device='cpu',
+                 dtype=np.float32,
+                 _max_length=-1):      
+        self.max_layer = max_layer
+        self.min_frocean = min_frocean
+        self.num_oceans = 0
+        super().__init__(data_path = data_path, 
+                         nb_portions = nb_portions, 
+                         batch_size = batch_size, 
+                         input_variables = input_variables, 
+                         output_variables = output_variables,
+                         file_keys = file_keys, 
+                         preprocessor_y = preprocessor_x,
+                         preprocessor_x = preprocessor_y,
+                         shuffle = shuffle, 
+                         verbose = verbose, 
+                         device = device,
+                         dtype = dtype,
+                         _max_length = _max_length)        
+
+    @property
+    def elements_per_file(self):
+        return self.num_oceans // self.nb_portions
+
+    def check(self):
+        super().check()        
+        print('child check')
+        assert('frocean' in self.input_variables)
+        assert(self.max_layer > 0)
+        assert(self.nb_portions == 1)
+        
+    def initialize(self):
+        super().initialize()
+        id_frocean= self.input_variables.index('frocean')
+        ocean_idx = np.where(self.X[:, 0, id_frocean] >= self.min_frocean)[0]
+        self.num_oceans = len(ocean_idx)
+
+  
+    def reload(self, file_id, portion_id):
+        super().reload(file_id, portion_id)
+        # Take out upper layers:
+        self.Y = self.Y[:, :, -self.max_layer:]
+        self.X = self.X[:, :, -self.max_layer:]
+        # Take out Earth Layers:
+        id_frocean = self.input_variables.index('frocean')
+        ocean_idx = np.where(self.X[:, 0, id_frocean] >= self.min_frocean)[0]
+        # Option 2 take out the examples (frocean doesnt change through time ? Does it? :/)
+        self.X = self.X[ocean_idx]
+        self.Y = self.Y[ocean_idx]
+

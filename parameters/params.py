@@ -2,7 +2,7 @@ input_variables = ['u', 'v', 't', 'phis',
              'frland','frlandice','frlake','frocean', # 'frseaice',
              'sphu','qitot','qltot','delp','ps_dyn',
               'dudtdyn', 'dvdtdyn', 'dtdtdyn']
-pred_variables = ['u', 'v', 't']
+pred_variables = ['u', 'v']
 
 
 # PREPROCESSORS :
@@ -54,7 +54,7 @@ data_path_test = '/Users/vmarchai/Documents/ML_DATA/c48_XY_only_test'
 
 # Experiments:
 experiments = f"Unet_{datetime.datetime.today().strftime('%Y%M%d')}"
-experiments = "Unet_20230914"
+experiments = "Unet_20230920_uvonly"
 
 # Experiment Name :
 output_path       = f"Output/{experiments}"

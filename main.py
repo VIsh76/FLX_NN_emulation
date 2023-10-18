@@ -261,6 +261,7 @@ end_time = time.time()
 delta_t = int(end_time - start_time)
 
 # %%
+plt.show()
 plt.plot(train_loss_list)
 plt.plot(test_loss_list)
 plt.legend(['train', 'test'])
